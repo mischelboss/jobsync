@@ -4,6 +4,10 @@ export type {
   JobMatchResult,
   JobMatchData,
 } from "@/models/ai.schemas";
+export {
+  CvImportSchema,
+  type CvImportResponse,
+} from "@/models/ai.schemas";
 export { parseJobMatch } from "./jobMatch/parse";
 
 // Prompts
@@ -14,6 +18,8 @@ export {
   buildJobMatchPrompt,
   AUTOMATION_JOB_MATCH_SYSTEM_PROMPT,
   buildAutomationJobMatchPrompt,
+  CV_IMPORT_SYSTEM_PROMPT,
+  buildCvImportPrompt,
 } from "./prompts";
 
 // Analysis tools
@@ -50,3 +56,6 @@ export {
 } from "./tools/text-processing";
 
 export { checkRateLimit } from "./rate-limiter";
+
+// PDF text extraction
+export { extractTextFromPdf, type PdfExtractionResult } from "./tools/pdf-extraction";

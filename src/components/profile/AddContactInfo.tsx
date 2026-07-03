@@ -26,10 +26,20 @@ import { toast } from "../ui/use-toast";
 import { ContactInfo } from "@/models/profile.model";
 import { addContactInfo, updateContactInfo } from "@/actions/profile.actions";
 
+interface ContactInfoPrefill {
+  firstName?: string | null;
+  lastName?: string | null;
+  headline?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  address?: string | null;
+}
+
 interface AddContactInfoProps {
   dialogOpen: boolean;
   setDialogOpen: (e: boolean) => void;
   contactInfoToEdit?: ContactInfo | null;
+  prefillData?: ContactInfoPrefill | null;
   resumeId: string | undefined;
 }
 
@@ -37,6 +47,7 @@ function AddContactInfo({
   dialogOpen,
   setDialogOpen,
   contactInfoToEdit,
+  prefillData,
   resumeId,
 }: AddContactInfoProps) {
   const [isPending, startTransition] = useTransition();
@@ -85,10 +96,23 @@ function AddContactInfo({
         },
         { keepDefaultValues: true }
       );
+    } else if (prefillData) {
+      reset(
+        {
+          resumeId,
+          firstName: prefillData.firstName ?? "",
+          lastName: prefillData.lastName ?? "",
+          headline: prefillData.headline ?? "",
+          email: prefillData.email ?? "",
+          phone: prefillData.phone ?? "",
+          address: prefillData.address ?? "",
+        },
+        { keepDefaultValues: true }
+      );
     } else {
       reset();
     }
-  }, [contactInfoToEdit, reset]);
+  }, [contactInfoToEdit, prefillData, resumeId, reset]);
 
   const onSubmit = (data: z.infer<typeof AddContactInfoFormSchema>) => {
     startTransition(async () => {

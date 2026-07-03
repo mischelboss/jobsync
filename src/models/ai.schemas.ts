@@ -57,3 +57,26 @@ export type JobMatchData = JobMatchScores & {
   analyzed?: boolean; // true once LLM match has run (auto top-K or on-demand)
   prerankComponents?: PrerankComponents;
 };
+
+// CV IMPORT SCHEMA
+// Extracts contact info + professional summary from a raw CV/resume text dump
+
+export const CvImportSchema = z.object({
+  firstName: z.string().nullable().describe("Candidate's first name, null if not found"),
+  lastName: z.string().nullable().describe("Candidate's last name, null if not found"),
+  headline: z
+    .string()
+    .nullable()
+    .describe("Professional headline/title (e.g. 'Senior Frontend Developer'), null if not found"),
+  email: z.string().nullable().describe("Contact email address, null if not found"),
+  phone: z.string().nullable().describe("Contact phone number, null if not found"),
+  address: z.string().nullable().describe("Postal address or city/country, null if not found"),
+  summary: z
+    .string()
+    .nullable()
+    .describe(
+      "Professional summary/profile text, 2-5 sentences. Use the existing summary if the CV has one; otherwise write a concise one from the candidate's experience. Keep the original language of the CV. Null only if there is truly no basis to write one.",
+    ),
+});
+
+export type CvImportResponse = z.infer<typeof CvImportSchema>;
