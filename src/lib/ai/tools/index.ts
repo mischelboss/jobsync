@@ -6,6 +6,7 @@
  * - text-processing: Shared text normalization and metadata extraction
  * - preprocessing: Resume preprocessing (normalization, validation)
  * - preprocessing-job: Job description preprocessing
+ * - pdf-extraction: Raw text extraction from uploaded PDF files
  */
 
 // Error classes
@@ -43,3 +44,6 @@ export {
   type JobMetadata,
   type PreprocessedJob,
 } from "./preprocessing-job";
+
+// PDF text extraction
+export { extractTextFromPdf, type PdfExtractionResult } from "./pdf-extraction";

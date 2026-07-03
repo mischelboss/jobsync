@@ -30,3 +30,9 @@ export {
   RESUME_IMPORT_SYSTEM_PROMPT,
   buildResumeImportPrompt,
 } from "./resume-import";
+
+// CV Import exports
+export {
+  CV_IMPORT_SYSTEM_PROMPT,
+  buildCvImportPrompt,
+} from "./cv-import";

@@ -29,11 +29,17 @@ import {
 } from "@/actions/profile.actions";
 import { ResumeSection } from "@/models/profile.model";
 
+interface SummaryPrefill {
+  sectionTitle?: string;
+  content: string;
+}
+
 interface AddResumeSummaryProps {
   resumeId: string | undefined;
   dialogOpen: boolean;
   setDialogOpen: (e: boolean) => void;
   summaryToEdit?: ResumeSection | null;
+  prefillData?: SummaryPrefill | null;
 }
 
 function AddResumeSummary({
@@ -41,6 +47,7 @@ function AddResumeSummary({
   dialogOpen,
   setDialogOpen,
   summaryToEdit,
+  prefillData,
 }: AddResumeSummaryProps) {
   const [isPending, startTransition] = useTransition();
 
@@ -69,8 +76,19 @@ function AddResumeSummary({
           keepDefaultValues: true,
         }
       );
+    } else if (prefillData) {
+      reset(
+        {
+          resumeId,
+          sectionTitle: prefillData.sectionTitle || "Summary",
+          content: prefillData.content,
+        },
+        {
+          keepDefaultValues: true,
+        }
+      );
     }
-  }, [summaryToEdit, reset]);
+  }, [summaryToEdit, prefillData, resumeId, reset]);
 
   const onSubmit = (data: z.infer<typeof AddSummarySectionFormSchema>) => {
     startTransition(async () => {

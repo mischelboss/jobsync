@@ -12,6 +12,7 @@ import EducationCard from "./EducationCard";
 import CertificationCard from "./CertificationCard";
 import SkillsSectionCard from "./SkillsSectionCard";
 import AiResumeReviewSection from "./AiResumeReviewSection";
+import ImportCvFromPdf from "./ImportCvFromPdf";
 import { DownloadFileButton } from "./DownloadFileButton";
 import {
   DropdownMenu,
@@ -790,6 +791,7 @@ function ResumeContainer({
           </CardDescription>
           <div className="flex items-center gap-2 flex-wrap lg:justify-end">
             <AddResumeSection resume={resume} ref={resumeSectionRef} />
+            <ImportCvFromPdf resume={resume} />
             <AiResumeReviewSection resume={resume} />
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
