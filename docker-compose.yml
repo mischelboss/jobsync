@@ -1,6 +1,7 @@
 services:
   app:
-    image: ghcr.io/gsync/jobsync:latest
+    build: .
+    image: jobsync-fork:local
     container_name: jobsync_app
     ports:
       - "3737:3737"
