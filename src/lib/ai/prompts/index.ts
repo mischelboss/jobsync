@@ -36,3 +36,9 @@ export {
   CV_IMPORT_SYSTEM_PROMPT,
   buildCvImportPrompt,
 } from "./cv-import";
+
+// Job Import exports
+export {
+  JOB_IMPORT_SYSTEM_PROMPT,
+  buildJobImportPrompt,
+} from "./job-import";
