@@ -6,7 +6,9 @@ export type {
 } from "@/models/ai.schemas";
 export {
   CvImportSchema,
+  JobImportSchema,
   type CvImportResponse,
+  type JobImportResponse,
 } from "@/models/ai.schemas";
 export { parseJobMatch } from "./jobMatch/parse";
 
@@ -20,6 +22,8 @@ export {
   buildAutomationJobMatchPrompt,
   CV_IMPORT_SYSTEM_PROMPT,
   buildCvImportPrompt,
+  JOB_IMPORT_SYSTEM_PROMPT,
+  buildJobImportPrompt,
 } from "./prompts";
 
 // Analysis tools

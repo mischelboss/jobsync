@@ -24,6 +24,7 @@ export interface PdfExtractionResult {
  */
 export const extractTextFromPdf = async (
   buffer: Buffer,
+  contentLabel: string = "CV",
 ): Promise<PdfExtractionResult> => {
   let rawText: string;
   try {
@@ -45,7 +46,7 @@ export const extractTextFromPdf = async (
     rawText,
     MIN_CHAR_COUNT,
     50000,
-    "CV",
+    contentLabel,
   );
 
   if (!validation.isValid) {

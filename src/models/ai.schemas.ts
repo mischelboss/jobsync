@@ -80,3 +80,37 @@ export const CvImportSchema = z.object({
 });
 
 export type CvImportResponse = z.infer<typeof CvImportSchema>;
+
+// JOB IMPORT SCHEMA
+// Single LLM call to extract job posting fields from raw PDF text
+
+export const JobImportSchema = z.object({
+  jobTitle: z.string().nullable().describe("The advertised job title, null if not found"),
+  company: z.string().nullable().describe("Hiring company name, null if not found"),
+  location: z
+    .string()
+    .nullable()
+    .describe("Job location as city plus country/state if given (e.g. 'Berlin, Germany'), null if not found"),
+  jobType: z
+    .enum(["FT", "PT", "C"])
+    .nullable()
+    .describe("Employment type: FT = full-time, PT = part-time, C = contract. Null if not stated"),
+  salaryMin: z
+    .number()
+    .nullable()
+    .describe("Lower bound of the advertised yearly salary as a plain number, null if not stated"),
+  salaryMax: z
+    .number()
+    .nullable()
+    .describe("Upper bound of the advertised yearly salary as a plain number, null if not stated"),
+  jobUrl: z
+    .string()
+    .nullable()
+    .describe("URL of the job posting if one appears in the text, null otherwise"),
+  description: z
+    .string()
+    .nullable()
+    .describe("The full job description text (responsibilities, requirements, benefits), lightly cleaned, in the posting's language"),
+});
+
+export type JobImportResponse = z.infer<typeof JobImportSchema>;

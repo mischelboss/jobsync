@@ -19,6 +19,8 @@ import {
 import { toast } from "../ui/use-toast";
 import {
   Company,
+  JobImportData,
+  JobImportPrefill,
   JobLocation,
   JobResponse,
   JobSource,
@@ -40,6 +42,7 @@ import { APP_CONSTANTS } from "@/lib/constants";
 import Loading from "../Loading";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { AddJob } from "./AddJob";
+import { ImportJobPdf } from "./ImportJobPdf";
 import MyJobsTable from "./MyJobsTable";
 import { NoteDialog } from "./NoteDialog";
 import { format } from "date-fns";
@@ -95,6 +98,7 @@ function JobsContainer({
   const [filterKey, setFilterKey] = useState<string>("none");
   const [searchTerm, setSearchTerm] = useState("");
   const [editJob, setEditJob] = useState(null);
+  const [importJob, setImportJob] = useState<JobImportPrefill | null>(null);
   const [initialLoading, setInitialLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [noteDialogOpen, setNoteDialogOpen] = useState(false);
@@ -253,6 +257,28 @@ function JobsContainer({
 
   const resetEditJob = () => {
     setEditJob(null);
+  };
+
+  const resetImportJob = () => {
+    setImportJob(null);
+  };
+
+  const onJobImported = (data: JobImportData) => {
+    // Make newly resolved entities selectable in the form comboboxes
+    // (same in-place merge the Combobox itself uses when creating options)
+    const mergeOption = (
+      options: { id: string }[],
+      entity?: { id: string } | null,
+    ) => {
+      if (entity && !options.some((option) => option.id === entity.id)) {
+        options.unshift(entity);
+      }
+    };
+    mergeOption(titles, data.jobTitle);
+    mergeOption(companies, data.company);
+    mergeOption(locations, data.location);
+    setEditJob(null);
+    setImportJob(data.prefill);
   };
 
   const onAddNote = (jobId: string) => {
@@ -441,6 +467,7 @@ function JobsContainer({
                 Export
               </span>
             </Button>
+            <ImportJobPdf onImported={onJobImported} />
             <AddJob
               jobStatuses={statuses}
               companies={companies}
@@ -450,6 +477,8 @@ function JobsContainer({
               tags={tags}
               editJob={editJob}
               resetEditJob={resetEditJob}
+              importJob={importJob}
+              resetImportJob={resetImportJob}
               initialOpen={queryParams.get("add-job") === "true"}
             />
           </div>

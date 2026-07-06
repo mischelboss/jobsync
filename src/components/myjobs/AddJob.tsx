@@ -17,6 +17,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import {
   Company,
   JOB_TYPES,
+  JobImportPrefill,
   JobLocation,
   JobResponse,
   JobSource,
@@ -61,6 +62,8 @@ type AddJobProps = {
   tags: Tag[];
   editJob?: JobResponse | null;
   resetEditJob: () => void;
+  importJob?: JobImportPrefill | null;
+  resetImportJob?: () => void;
   initialOpen?: boolean;
   hideTrigger?: boolean;
   redirectPath?: string;
@@ -75,6 +78,8 @@ export function AddJob({
   tags,
   editJob,
   resetEditJob,
+  importJob,
+  resetImportJob,
   initialOpen,
   hideTrigger,
   redirectPath,
@@ -169,6 +174,14 @@ export function AddJob({
   }, [editJob, reset]);
 
   useEffect(() => {
+    if (importJob) {
+      // Prefill from PDF import; absent fields keep their form defaults
+      reset({ ...importJob }, { keepDefaultValues: true });
+      setDialogOpen(true);
+    }
+  }, [importJob, reset]);
+
+  useEffect(() => {
     if (!dialogOpen) return;
     loadResumes();
     loadCoverLetters();
@@ -209,6 +222,7 @@ export function AddJob({
   const addJobForm = () => {
     reset();
     resetEditJob();
+    resetImportJob?.();
     setDialogOpen(true);
   };
 
@@ -245,7 +259,13 @@ export function AddJob({
           </span>
         </Button>
       )}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      <Dialog
+        open={dialogOpen}
+        onOpenChange={(open) => {
+          setDialogOpen(open);
+          if (!open) resetImportJob?.();
+        }}
+      >
         <DialogOverlay>
           <DialogContent className="h-full xl:h-[85vh] lg:h-[95vh] lg:max-w-screen-lg lg:max-h-screen overflow-y-scroll">
             <DialogHeader>

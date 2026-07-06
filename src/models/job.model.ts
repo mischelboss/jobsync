@@ -118,3 +118,20 @@ export enum JOB_TYPES {
   PT = "Part-time",
   C = "Contract",
 }
+
+export interface JobImportPrefill {
+  title?: string;
+  company?: string;
+  location?: string;
+  type?: string;
+  salaryRange?: string;
+  jobDescription: string;
+  jobUrl?: string;
+}
+
+export interface JobImportData {
+  prefill: JobImportPrefill;
+  jobTitle?: JobTitle | null;
+  company?: Company | null;
+  location?: JobLocation | null;
+}
