@@ -10,6 +10,7 @@ import type {
 } from "@/models/automation.model";
 import type { ScraperError, JobDetails } from "./types";
 import { searchJSearchJobs } from "./jsearch";
+import { searchBaJobs } from "./ba";
 import { searchGreenhouseJobs } from "./greenhouse";
 import { runGreenhousePipeline } from "./greenhouse/pipeline";
 import type { ScoredJob } from "./greenhouse/pipeline";
@@ -305,13 +306,17 @@ export async function runAutomation(
       `Searching for jobs: "${automation.keywords}" in ${automation.location}`,
     );
 
-    // Use JSearch API with user's key if available
-    const rapidApiKey = await resolveApiKey(automation.userId, "rapidapi");
-    const searchResult = await searchJSearchJobs(
-      automation.keywords,
-      automation.location,
-      rapidApiKey,
-    );
+    // Both JSearch and Bundesagentur return full job details up front, so they
+    // share the same downstream dedup/match/save pipeline. Bundesagentur is
+    // free and needs no key; JSearch uses the user's RapidAPI key if available.
+    const searchResult =
+      automation.jobBoard === "arbeitsagentur"
+        ? await searchBaJobs(automation.keywords, automation.location)
+        : await searchJSearchJobs(
+            automation.keywords,
+            automation.location,
+            await resolveApiKey(automation.userId, "rapidapi"),
+          );
 
     if (!searchResult.success) {
       automationLogger.log(
@@ -345,7 +350,11 @@ export async function runAutomation(
     automationLogger.log(
       automation.id,
       "success",
-      `Found ${jobsSearched} jobs from JSearch API`,
+      `Found ${jobsSearched} jobs from ${
+        automation.jobBoard === "arbeitsagentur"
+          ? "Bundesagentur für Arbeit"
+          : "JSearch API"
+      }`,
       { jobsSearched },
     );
 

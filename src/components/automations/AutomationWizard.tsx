@@ -266,12 +266,17 @@ export function AutomationWizard({
                     <SelectItem value="greenhouse">
                       Greenhouse (company boards)
                     </SelectItem>
+                    <SelectItem value="arbeitsagentur">
+                      Bundesagentur für Arbeit
+                    </SelectItem>
                   </SelectContent>
                 </Select>
                 <FormDescription>
                   {formValues.jobBoard === "jsearch"
                     ? "Keyword-based job search via Google Jobs API (RapidAPI key required)"
-                    : "Track specific companies' job boards"}
+                    : formValues.jobBoard === "arbeitsagentur"
+                      ? "Keyword-based search of the German Federal Employment Agency job board (free, no key required)"
+                      : "Track specific companies' job boards"}
                 </FormDescription>
                 <FormMessage />
               </FormItem>
