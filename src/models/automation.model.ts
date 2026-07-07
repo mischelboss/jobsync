@@ -11,7 +11,7 @@ export type AutomationRunStatus =
   | "rate_limited"
   | "cancelled";
 export type DiscoveryStatus = "new" | "accepted" | "dismissed";
-export type JobBoard = "jsearch" | "greenhouse";
+export type JobBoard = "jsearch" | "greenhouse" | "arbeitsagentur";
 
 export interface GreenhouseCompany {
   name: string;

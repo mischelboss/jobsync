@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { APP_CONSTANTS } from "@/lib/constants";
 
-export const JobBoardSchema = z.enum(["jsearch", "greenhouse"]);
+export const JobBoardSchema = z.enum(["jsearch", "greenhouse", "arbeitsagentur"]);
 
 export const AutomationStatusSchema = z.enum(["active", "paused"]);
 
@@ -49,7 +49,7 @@ export const CreateAutomationSchema = z
     scheduleHour: z.number().min(0).max(23),
   })
   .superRefine((data, ctx) => {
-    if (data.jobBoard === "jsearch") {
+    if (data.jobBoard === "jsearch" || data.jobBoard === "arbeitsagentur") {
       if (!data.keywords || data.keywords.trim().length === 0) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
