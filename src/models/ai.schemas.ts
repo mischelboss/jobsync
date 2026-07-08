@@ -59,7 +59,42 @@ export type JobMatchData = JobMatchScores & {
 };
 
 // CV IMPORT SCHEMA
-// Extracts contact info + professional summary from a raw CV/resume text dump
+// Extracts contact info, summary, work experience, and education from a raw CV/resume text dump
+
+const CvWorkExperienceSchema = z.object({
+  jobTitle: z.string().describe("Job title exactly as written on the CV"),
+  company: z.string().describe("Company/employer name exactly as written on the CV"),
+  location: z.string().nullable().describe("City/location for this role, null if not mentioned"),
+  startDate: z
+    .string()
+    .nullable()
+    .describe("Start date in YYYY-MM format (e.g. '2021-03'), null if it cannot be determined"),
+  endDate: z
+    .string()
+    .nullable()
+    .describe("End date in YYYY-MM format, null if this is the current/ongoing role"),
+  isCurrent: z.boolean().describe("True if the CV explicitly marks this as the current/ongoing role"),
+  description: z
+    .string()
+    .describe("Concise description of responsibilities/achievements for this role, based only on the CV text"),
+});
+
+const CvEducationSchema = z.object({
+  institution: z.string().describe("School/university name exactly as written on the CV"),
+  degree: z.string().describe("Degree name, e.g. 'Bachelor of Science'"),
+  fieldOfStudy: z.string().describe("Field of study / major"),
+  location: z.string().nullable().describe("City/location of the institution, null if not mentioned"),
+  startDate: z
+    .string()
+    .nullable()
+    .describe("Start date in YYYY-MM format, null if it cannot be determined"),
+  endDate: z
+    .string()
+    .nullable()
+    .describe("End date in YYYY-MM format, null if ongoing or not mentioned"),
+  isCompleted: z.boolean().describe("True if the CV explicitly indicates the degree was completed"),
+  description: z.string().nullable().describe("Short additional description, null if none is given"),
+});
 
 export const CvImportSchema = z.object({
   firstName: z.string().nullable().describe("Candidate's first name, null if not found"),
@@ -77,9 +112,17 @@ export const CvImportSchema = z.object({
     .describe(
       "Professional summary/profile text, 2-5 sentences. Use the existing summary if the CV has one; otherwise write a concise one from the candidate's experience. Keep the original language of the CV. Null only if there is truly no basis to write one.",
     ),
+  workExperiences: z
+    .array(CvWorkExperienceSchema)
+    .describe("Every work experience entry found in the CV, in the order listed there. Empty array if none."),
+  educations: z
+    .array(CvEducationSchema)
+    .describe("Every education entry found in the CV, in the order listed there. Empty array if none."),
 });
 
 export type CvImportResponse = z.infer<typeof CvImportSchema>;
+export type CvWorkExperienceImport = z.infer<typeof CvWorkExperienceSchema>;
+export type CvEducationImport = z.infer<typeof CvEducationSchema>;
 
 // JOB IMPORT SCHEMA
 // Single LLM call to extract job posting fields from raw PDF text
