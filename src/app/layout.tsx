@@ -1,14 +1,18 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import localFont from "next/font/local";
 import "./globals.css";
 import { cn } from "@/lib/utils";
 import { ThemeProvider } from "@/components/theme-provider";
 
 export const dynamic = "force-dynamic";
 
-const inter = Inter({
-  subsets: ["latin"],
+// Self-hosted Inter (variable, latin) so production/Docker builds don't fetch
+// from Google Fonts at build time (avoids network-dependent build failures).
+const inter = localFont({
+  src: "./fonts/inter-latin-variable.woff2",
   variable: "--font-inter",
+  display: "swap",
+  weight: "100 900",
 });
 
 export const metadata: Metadata = {
