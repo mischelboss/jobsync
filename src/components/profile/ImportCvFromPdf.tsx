@@ -21,6 +21,7 @@ import { getUserSettings } from "@/actions/userSettings.actions";
 import { checkOllamaConnection } from "@/utils/ai.utils";
 import AddContactInfo from "./AddContactInfo";
 import AddResumeSummary from "./AddResumeSummary";
+import ResolveCvEntities from "./ResolveCvEntities";
 
 interface ImportCvFromPdfProps {
   resume: Resume;
@@ -42,11 +43,13 @@ function ImportCvFromPdf({ resume }: ImportCvFromPdfProps) {
   const [ollamaConnected, setOllamaConnected] = useState<boolean | null>(null);
   const [connectionError, setConnectionError] = useState<string>("");
 
-  const [step, setStep] = useState<"contact" | "summary" | null>(null);
+  const [step, setStep] = useState<"contact" | "summary" | "entities" | null>(null);
   const [contactInfoToEdit, setContactInfoToEdit] = useState<ContactInfo | null>(null);
   const [contactPrefillData, setContactPrefillData] = useState<ContactPrefill | null>(null);
   const [summaryToEdit, setSummaryToEdit] = useState<ResumeSection | null>(null);
   const [summaryPrefillData, setSummaryPrefillData] = useState<{ sectionTitle?: string; content: string } | null>(null);
+  const [extractedExperiences, setExtractedExperiences] = useState<CvImportResponse["workExperiences"]>([]);
+  const [extractedEducations, setExtractedEducations] = useState<CvImportResponse["educations"]>([]);
 
   const existingSummarySection = resume?.ResumeSections?.find(
     (section) => section.sectionType === SectionType.SUMMARY,
@@ -94,6 +97,8 @@ function ImportCvFromPdf({ resume }: ImportCvFromPdfProps) {
     setContactPrefillData(null);
     setSummaryToEdit(null);
     setSummaryPrefillData(null);
+    setExtractedExperiences([]);
+    setExtractedEducations([]);
   };
 
   const applyExtraction = (data: CvImportResponse) => {
@@ -122,6 +127,12 @@ function ImportCvFromPdf({ resume }: ImportCvFromPdfProps) {
       hasSummaryPayload = true;
     }
 
+    const workExperiences = data.workExperiences ?? [];
+    const educations = data.educations ?? [];
+    setExtractedExperiences(workExperiences);
+    setExtractedEducations(educations);
+    const hasEntities = workExperiences.length > 0 || educations.length > 0;
+
     if (anyContactField) {
       if (resume.ContactInfo) {
         setContactInfoToEdit({
@@ -146,12 +157,22 @@ function ImportCvFromPdf({ resume }: ImportCvFromPdfProps) {
       setStep("contact");
     } else if (hasSummaryPayload) {
       setStep("summary");
+    } else if (hasEntities) {
+      setStep("entities");
     } else {
       toast({
         variant: "destructive",
         title: "Nothing found",
-        description: "The AI couldn't extract any contact info or summary from this CV.",
+        description: "The AI couldn't extract any contact info, summary, experience, or education from this CV.",
       });
+    }
+  };
+
+  const advanceToEntitiesOrDone = () => {
+    if (extractedExperiences.length > 0 || extractedEducations.length > 0) {
+      setStep("entities");
+    } else {
+      resetImportState();
     }
   };
 
@@ -202,12 +223,20 @@ function ImportCvFromPdf({ resume }: ImportCvFromPdfProps) {
 
   const handleContactDialogChange = (open: boolean) => {
     if (open) return;
-    setStep(summaryToEdit || summaryPrefillData ? "summary" : null);
+    if (summaryToEdit || summaryPrefillData) {
+      setStep("summary");
+    } else {
+      advanceToEntitiesOrDone();
+    }
   };
 
   const handleSummaryDialogChange = (open: boolean) => {
     if (open) return;
-    resetImportState();
+    advanceToEntitiesOrDone();
+  };
+
+  const handleEntitiesOpenChange = (open: boolean) => {
+    if (!open) resetImportState();
   };
 
   return (
@@ -226,8 +255,8 @@ function ImportCvFromPdf({ resume }: ImportCvFromPdfProps) {
             <DialogTitle>Import from CV (PDF)</DialogTitle>
             <DialogDescription>
               Upload a text-based PDF resume. We&apos;ll extract your contact
-              info and summary and prefill the forms below — nothing is saved
-              until you confirm.
+              info, summary, work experience, and education and let you
+              review everything below — nothing is saved until you confirm.
             </DialogDescription>
           </DialogHeader>
 
@@ -292,6 +321,14 @@ function ImportCvFromPdf({ resume }: ImportCvFromPdfProps) {
         setDialogOpen={handleSummaryDialogChange}
         summaryToEdit={summaryToEdit}
         prefillData={summaryPrefillData}
+      />
+      <ResolveCvEntities
+        resume={resume}
+        open={step === "entities"}
+        onOpenChange={handleEntitiesOpenChange}
+        workExperiences={extractedExperiences}
+        educations={extractedEducations}
+        onDone={resetImportState}
       />
     </>
   );
