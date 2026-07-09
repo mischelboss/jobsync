@@ -10,8 +10,14 @@ export type AutomationRunStatus =
   | "blocked"
   | "rate_limited"
   | "cancelled";
-export type DiscoveryStatus = "new" | "accepted" | "dismissed";
+export type DiscoveryStatus =
+  | "new"
+  | "below_threshold"
+  | "accepted"
+  | "dismissed";
 export type JobBoard = "jsearch" | "greenhouse" | "arbeitsagentur";
+export type SourceType = "jobboard" | "email";
+export type EmailFilterType = "label" | "sender" | "subject";
 
 export interface GreenhouseCompany {
   name: string;
@@ -36,10 +42,14 @@ export interface Automation {
   id: string;
   userId: string;
   name: string;
+  sourceType: SourceType;
   jobBoard: JobBoard;
   keywords: string;
   location: string;
   sourceConfig?: string | null;
+  emailFilterType?: EmailFilterType | null;
+  emailFilterValue?: string | null;
+  followLinks?: boolean;
   resumeId: string;
   matchThreshold: number;
   scheduleHour: number;
@@ -109,6 +119,7 @@ export interface ScrapedJobData {
   location: string;
   description: string;
   sourceUrl: string;
-  sourceBoard: JobBoard;
+  sourceBoard: string;
   employmentType?: string;
+  contentFingerprint?: string;
 }

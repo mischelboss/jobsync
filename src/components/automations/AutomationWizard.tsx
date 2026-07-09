@@ -22,6 +22,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
+import { Switch } from "@/components/ui/switch";
 import {
   Form,
   FormControl,
@@ -43,6 +44,8 @@ import { toast } from "@/components/ui/use-toast";
 import type {
   AutomationWithResume,
   JobBoard,
+  SourceType,
+  EmailFilterType,
   GreenhouseSourceConfig,
 } from "@/models/automation.model";
 import { GreenhouseSearchStep } from "./GreenhouseSearchStep";
@@ -113,10 +116,15 @@ export function AutomationWizard({
     mode: "onChange",
     defaultValues: {
       name: editAutomation?.name ?? "",
-      jobBoard: (editAutomation?.jobBoard as JobBoard) ?? "greenhouse",
+      sourceType: (editAutomation?.sourceType as SourceType) ?? "jobboard",
+      jobBoard: (editAutomation?.jobBoard as JobBoard) || "greenhouse",
       keywords: editAutomation?.keywords ?? "",
       location: editAutomation?.location ?? "",
       sourceConfig: parseEditSourceConfig(editAutomation?.sourceConfig),
+      emailFilterType:
+        (editAutomation?.emailFilterType as EmailFilterType) ?? "sender",
+      emailFilterValue: editAutomation?.emailFilterValue ?? "",
+      followLinks: editAutomation?.followLinks ?? false,
       resumeId: editAutomation?.resumeId ?? "",
       matchThreshold: editAutomation?.matchThreshold ?? 80,
       scheduleHour: editAutomation?.scheduleHour ?? 8,
@@ -127,10 +135,15 @@ export function AutomationWizard({
     if (open) {
       form.reset({
         name: editAutomation?.name ?? "",
-        jobBoard: (editAutomation?.jobBoard as JobBoard) ?? "greenhouse",
+        sourceType: (editAutomation?.sourceType as SourceType) ?? "jobboard",
+        jobBoard: (editAutomation?.jobBoard as JobBoard) || "greenhouse",
         keywords: editAutomation?.keywords ?? "",
         location: editAutomation?.location ?? "",
         sourceConfig: parseEditSourceConfig(editAutomation?.sourceConfig),
+        emailFilterType:
+          (editAutomation?.emailFilterType as EmailFilterType) ?? "sender",
+        emailFilterValue: editAutomation?.emailFilterValue ?? "",
+        followLinks: editAutomation?.followLinks ?? false,
         resumeId: editAutomation?.resumeId ?? "",
         matchThreshold: editAutomation?.matchThreshold ?? 80,
         scheduleHour: editAutomation?.scheduleHour ?? 8,
@@ -177,7 +190,8 @@ export function AutomationWizard({
     }
   };
 
-  const isGreenhouse = formValues.jobBoard === "greenhouse";
+  const isEmail = formValues.sourceType === "email";
+  const isGreenhouse = !isEmail && formValues.jobBoard === "greenhouse";
   const greenhouseConfig =
     formValues.sourceConfig?.greenhouse ?? EMPTY_GREENHOUSE;
 
@@ -186,6 +200,12 @@ export function AutomationWizard({
       case 0:
         return (formValues.name?.trim().length ?? 0) > 0;
       case 1:
+        if (isEmail) {
+          return (
+            !!formValues.emailFilterType &&
+            (formValues.emailFilterValue?.trim().length ?? 0) > 0
+          );
+        }
         if (isGreenhouse) {
           return (greenhouseConfig.companies?.length ?? 0) > 0;
         }
@@ -249,40 +269,77 @@ export function AutomationWizard({
           />
           <FormField
             control={form.control}
-            name="jobBoard"
+            name="sourceType"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Job Board</FormLabel>
+                <FormLabel>Source</FormLabel>
                 <Select onValueChange={field.onChange} value={field.value}>
                   <FormControl>
                     <SelectTrigger>
-                      <SelectValue placeholder="Select a job board" />
+                      <SelectValue placeholder="Select a source" />
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    <SelectItem value="jsearch">
-                      JSearch (Google Jobs)
-                    </SelectItem>
-                    <SelectItem value="greenhouse">
-                      Greenhouse (company boards)
-                    </SelectItem>
-                    <SelectItem value="arbeitsagentur">
-                      Bundesagentur für Arbeit
-                    </SelectItem>
+                    <SelectItem value="jobboard">Job board</SelectItem>
+                    <SelectItem value="email">Email alert (IMAP)</SelectItem>
                   </SelectContent>
                 </Select>
                 <FormDescription>
-                  {formValues.jobBoard === "jsearch"
-                    ? "Keyword-based job search via Google Jobs API (RapidAPI key required)"
-                    : formValues.jobBoard === "arbeitsagentur"
-                      ? "Keyword-based search of the German Federal Employment Agency job board (free, no key required)"
-                      : "Track specific companies' job boards"}
+                  {isEmail
+                    ? "Extract jobs from job-alert emails (StepStone, LinkedIn, …) in a connected IMAP mailbox"
+                    : "Search a job board directly"}
                 </FormDescription>
                 <FormMessage />
               </FormItem>
             )}
           />
-          {formValues.jobBoard === "jsearch" && (
+          {!isEmail && (
+            <FormField
+              control={form.control}
+              name="jobBoard"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Job Board</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select a job board" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="jsearch">
+                        JSearch (Google Jobs)
+                      </SelectItem>
+                      <SelectItem value="greenhouse">
+                        Greenhouse (company boards)
+                      </SelectItem>
+                      <SelectItem value="arbeitsagentur">
+                        Bundesagentur für Arbeit
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FormDescription>
+                    {formValues.jobBoard === "jsearch"
+                      ? "Keyword-based job search via Google Jobs API (RapidAPI key required)"
+                      : formValues.jobBoard === "arbeitsagentur"
+                        ? "Keyword-based search of the German Federal Employment Agency job board (free, no key required)"
+                        : "Track specific companies' job boards"}
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          )}
+          {isEmail && (
+            <div className="flex items-center gap-2 text-muted-foreground text-sm">
+              <AlertTriangle className="h-4 w-4 shrink-0" />
+              <span>
+                Requires an IMAP mailbox configured in Settings (app password for
+                Gmail/2FA accounts).
+              </span>
+            </div>
+          )}
+          {!isEmail && formValues.jobBoard === "jsearch" && (
             <div className="flex items-center gap-2 text-amber-600 text-sm">
               <AlertTriangle className="h-4 w-4 shrink-0" />
               <span>
@@ -295,7 +352,93 @@ export function AutomationWizard({
 
         {/* Step 1: Search */}
         <div className={step === 1 ? "space-y-4" : "hidden"}>
-          {isGreenhouse ? (
+          {isEmail ? (
+            <>
+              <FormField
+                control={form.control}
+                name="emailFilterType"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Match emails by</FormLabel>
+                    <Select
+                      onValueChange={field.onChange}
+                      value={field.value}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select a filter" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="sender">Sender address</SelectItem>
+                        <SelectItem value="subject">Subject contains</SelectItem>
+                        <SelectItem value="label">Label / folder</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormDescription>
+                      How to find alert emails in your mailbox
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="emailFilterValue"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>
+                      {formValues.emailFilterType === "sender"
+                        ? "Sender address"
+                        : formValues.emailFilterType === "subject"
+                          ? "Subject text"
+                          : "Label / folder name"}
+                    </FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder={
+                          formValues.emailFilterType === "sender"
+                            ? "e.g., jobs@stepstone.de"
+                            : formValues.emailFilterType === "subject"
+                              ? "e.g., Neue Jobs für dich"
+                              : "e.g., JobAlerts"
+                        }
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      {formValues.emailFilterType === "label"
+                        ? "Gmail exposes labels as folders — enter the exact label name"
+                        : "Only emails matching this are scanned for jobs"}
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="followLinks"
+                render={({ field }) => (
+                  <FormItem className="flex items-center justify-between rounded-lg border p-3">
+                    <div className="space-y-0.5 pr-4">
+                      <FormLabel>Follow job links</FormLabel>
+                      <FormDescription>
+                        Fetch each job&apos;s page for the full description.
+                        Degrades to the email snippet on login walls/errors.
+                        Leave off for shared mailboxes.
+                      </FormDescription>
+                    </div>
+                    <FormControl>
+                      <Switch
+                        checked={!!field.value}
+                        onCheckedChange={field.onChange}
+                      />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+            </>
+          ) : isGreenhouse ? (
             <GreenhouseSearchStep
               value={greenhouseConfig}
               onChange={(next) =>
@@ -402,9 +545,11 @@ export function AutomationWizard({
                   />
                 </FormControl>
                 <FormDescription>
-                  {isGreenhouse
-                    ? "Highlight listings whose AI match score exceeds this threshold. Relevant listings are saved regardless — this only flags strong matches."
-                    : "Only save jobs that match your resume above this percentage. Higher = fewer but better matches."}
+                  {isEmail
+                    ? "Jobs scoring at or above this land in the main list; the rest are kept in a separate below-threshold list. All matched jobs are saved."
+                    : isGreenhouse
+                      ? "Highlight listings whose AI match score exceeds this threshold. Relevant listings are saved regardless — this only flags strong matches."
+                      : "Only save jobs that match your resume above this percentage. Higher = fewer but better matches."}
                 </FormDescription>
                 <FormMessage />
               </FormItem>
@@ -457,12 +602,35 @@ export function AutomationWizard({
               <span className="font-medium">{formValues.name || "-"}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Job Board</span>
-              <span className="font-medium capitalize">
-                {formValues.jobBoard || "-"}
+              <span className="text-muted-foreground">Source</span>
+              <span className="font-medium">
+                {isEmail ? "Email alert" : "Job board"}
               </span>
             </div>
-            {isGreenhouse ? (
+            {!isEmail && (
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Job Board</span>
+                <span className="font-medium capitalize">
+                  {formValues.jobBoard || "-"}
+                </span>
+              </div>
+            )}
+            {isEmail ? (
+              <>
+                <div className="flex justify-between gap-4">
+                  <span className="text-muted-foreground">Email filter</span>
+                  <span className="font-medium text-right capitalize">
+                    {formValues.emailFilterType}: {formValues.emailFilterValue || "-"}
+                  </span>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <span className="text-muted-foreground">Follow links</span>
+                  <span className="font-medium text-right">
+                    {formValues.followLinks ? "Yes" : "No"}
+                  </span>
+                </div>
+              </>
+            ) : isGreenhouse ? (
               <>
                 <div className="flex justify-between gap-4">
                   <span className="text-muted-foreground">Companies</span>

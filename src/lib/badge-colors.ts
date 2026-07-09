@@ -40,6 +40,7 @@ export const DISCOVERY_STATUS_BADGE_COLORS: Record<
   BadgeColor
 > = {
   new: "blue",
+  below_threshold: "amber",
   accepted: "emerald",
   dismissed: "slate",
 };

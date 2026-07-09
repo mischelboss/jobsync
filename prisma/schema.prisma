@@ -35,8 +35,25 @@ model User {
   Tag            Tag[]
   Question       Question[]
   McpAccessToken McpAccessToken[]
+  ImapConfig     ImapConfig?
   defaultResumeId String?
   defaultResume   Resume?          @relation("UserDefaultResume", fields: [defaultResumeId], references: [id], onDelete: SetNull)
+}
+
+// One IMAP mailbox per user (not per automation). App-password/credentials are
+// encrypted at rest with the same scheme as ApiKey (encrypted value + iv).
+model ImapConfig {
+  id                String   @id @default(uuid())
+  userId            String   @unique
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  host              String
+  port              Int      @default(993)
+  username          String
+  encryptedPassword String
+  iv                String
+  useTls            Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 }
 
 model ApiKey {
@@ -319,11 +336,16 @@ model Job {
   discoveryStatus String?
   discoveredAt    DateTime?
 
+  // Normalized company+title+city hash for content-based dedup (email alerts
+  // deliver the same job from multiple senders with different/absent URLs).
+  contentFingerprint String?
+
   // MCP provenance: which agent/token created this job (null = UI or automation)
   createdVia      String?
 
   @@index([userId, automationId])
   @@index([userId, discoveryStatus])
+  @@index([userId, contentFingerprint])
 }
 
 model ActivityType {
@@ -393,10 +415,18 @@ model Automation {
   user   User   @relation(fields: [userId], references: [id])
 
   name           String
+  // "jobboard" | "email". Board fields below are unused for email automations.
+  sourceType     String @default("jobboard")
   jobBoard       String
   keywords       String
   location       String
   sourceConfig   String? // JSON; per-source params (Greenhouse watchlist, titles)
+
+  // Email-alert source config (sourceType == "email").
+  emailFilterType  String? // "label" | "sender" | "subject"
+  emailFilterValue String?
+  followLinks      Boolean @default(false)
+
   resumeId       String
   resume         Resume @relation(fields: [resumeId], references: [id])
   matchThreshold Int    @default(80)
@@ -412,9 +442,24 @@ model Automation {
 
   runs           AutomationRun[]
   discoveredJobs Job[]
+  processedEmails ProcessedAlertEmail[]
 
   @@index([userId])
   @@index([status, nextRunAt])
+}
+
+// Message-IDs of alert mails already turned into jobs, so a re-run never
+// reprocesses the same email. Per-automation: two automations may legitimately
+// want the same message.
+model ProcessedAlertEmail {
+  id           String     @id @default(uuid())
+  automationId String
+  automation   Automation @relation(fields: [automationId], references: [id], onDelete: Cascade)
+  messageId    String
+  processedAt  DateTime   @default(now())
+
+  @@unique([automationId, messageId])
+  @@index([automationId])
 }
 
 model AutomationRun {

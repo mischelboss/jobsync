@@ -27,6 +27,8 @@ interface MapperInput {
   automationId: string;
   matchScore: number;
   matchData: string;
+  // Defaults to "new". Email alerts pass "below_threshold" for the second list.
+  discoveryStatus?: DiscoveryStatus;
 }
 
 interface MapperOutput {
@@ -46,12 +48,20 @@ interface MapperOutput {
   matchData: string;
   discoveryStatus: DiscoveryStatus;
   discoveredAt: Date;
+  contentFingerprint: string | null;
 }
 
 export async function mapScrapedJobToJobRecord(
   input: MapperInput
 ): Promise<MapperOutput> {
-  const { scrapedJob, userId, automationId, matchScore, matchData } = input;
+  const {
+    scrapedJob,
+    userId,
+    automationId,
+    matchScore,
+    matchData,
+    discoveryStatus = "new",
+  } = input;
 
   const jobTitleId = await findOrCreateJobTitle(scrapedJob.title, userId);
   const locationId = await findOrCreateLocation(scrapedJob.location, userId);
@@ -74,8 +84,9 @@ export async function mapScrapedJobToJobRecord(
     locationId,
     matchScore,
     matchData,
-    discoveryStatus: "new",
+    discoveryStatus,
     discoveredAt: new Date(),
+    contentFingerprint: scrapedJob.contentFingerprint ?? null,
   };
 }
 

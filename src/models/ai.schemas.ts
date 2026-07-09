@@ -157,3 +157,40 @@ export const JobImportSchema = z.object({
 });
 
 export type JobImportResponse = z.infer<typeof JobImportSchema>;
+
+// EMAIL ALERT SCHEMA
+// A single job-alert email (StepStone, LinkedIn, Bundesagentur, …) typically
+// lists several jobs. One LLM call extracts them all as an array.
+
+const EmailAlertJobSchema = z.object({
+  title: z.string().describe("The job title exactly as written in the email"),
+  company: z
+    .string()
+    .nullable()
+    .describe("Hiring company name, null if the email does not name one"),
+  location: z
+    .string()
+    .nullable()
+    .describe("Job location (city plus country/state if given), null if not shown"),
+  description: z
+    .string()
+    .nullable()
+    .describe(
+      "The job snippet/teaser text shown for this listing in the email, lightly cleaned. Null if the email shows only a title.",
+    ),
+  url: z
+    .string()
+    .nullable()
+    .describe("The link to this specific job posting, null if none is present"),
+});
+
+export const EmailAlertSchema = z.object({
+  jobs: z
+    .array(EmailAlertJobSchema)
+    .describe(
+      "Every distinct job listing found in the alert email, in the order shown. Do not invent jobs, do not include unrelated links (unsubscribe, account, search-more). Empty array if the email contains no job listings.",
+    ),
+});
+
+export type EmailAlertResponse = z.infer<typeof EmailAlertSchema>;
+export type EmailAlertJob = z.infer<typeof EmailAlertJobSchema>;
