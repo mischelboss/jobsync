@@ -84,6 +84,36 @@ export function dedupeJobs<T extends DedupableJob>(
   return result;
 }
 
+// Folds German umlauts and other diacritics to their ASCII form so "Müller" and
+// "Mueller", or "Klöckner" and "Kloeckner", produce the same token. Runs before
+// normalizeForSearch (which would otherwise *strip* an umlaut, not fold it).
+function foldDiacritics(str: string): string {
+  return str
+    .replace(/ä/gi, "ae")
+    .replace(/ö/gi, "oe")
+    .replace(/ü/gi, "ue")
+    .replace(/ß/g, "ss")
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, ""); // strip remaining combining diacritical marks
+}
+
+// Content-based dedup key: normalized company + title + city. Unlike jobDedupeKey
+// this ignores the URL entirely, so the same job arriving from two different
+// alert emails (different tracking links, or one linkless) still collapses.
+// Best-effort: folds diacritics/umlauts and strips casing/whitespace/punctuation.
+// It cannot equate a brand short-name with its full legal name (e.g. "kloeckner.i"
+// vs "Klöckner i GmbH") — that would need company-name canonicalization.
+export function contentFingerprint(
+  company: string,
+  title: string,
+  location?: string,
+): string {
+  const city = location ? extractCityName(location) ?? location : "";
+  return [company, title, city]
+    .map((part) => normalizeForSearch(foldDiacritics(part ?? "")))
+    .join("|");
+}
+
 export function normalizeForSearch(str: string): string {
   return str
     .toLowerCase()

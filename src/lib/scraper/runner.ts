@@ -7,6 +7,7 @@ import type {
   ScrapedJobData,
   JobBoard,
   FunnelStage,
+  EmailFilterType,
 } from "@/models/automation.model";
 import type { ScraperError, JobDetails } from "./types";
 import { searchJSearchJobs } from "./jsearch";
@@ -15,7 +16,16 @@ import { searchGreenhouseJobs } from "./greenhouse";
 import { runGreenhousePipeline } from "./greenhouse/pipeline";
 import type { ScoredJob } from "./greenhouse/pipeline";
 import { mapScrapedJobToJobRecord } from "./mapper";
-import { normalizeJobUrl, dedupeJobs, jobDedupeKey } from "./utils";
+import {
+  normalizeJobUrl,
+  dedupeJobs,
+  jobDedupeKey,
+  contentFingerprint,
+} from "./utils";
+import { fetchAlertEmails, type ImapConnectionParams } from "./email";
+import { extractJobsFromEmail } from "./email/parser";
+import { followJobLink } from "./email/follow";
+import { decrypt } from "@/lib/encryption";
 import { calculateNextRunAt } from "./schedule";
 import { APP_CONSTANTS } from "@/lib/constants";
 import {
@@ -24,6 +34,7 @@ import {
   AUTOMATION_JOB_MATCH_SYSTEM_PROMPT,
   buildAutomationJobMatchPrompt,
   removeHtmlTags,
+  type EmailAlertJob,
 } from "@/lib/ai";
 import {
   AiProvider,
@@ -290,6 +301,15 @@ export async function runAutomation(
       "success",
       `Resume loaded: ${resume.title}`,
     );
+
+    if (automation.sourceType === "email") {
+      return await runEmailRun(
+        automation,
+        run.id,
+        resume as ResumeWithSections,
+        effectiveSignal,
+      );
+    }
 
     if (automation.jobBoard === "greenhouse") {
       return await runGreenhouseRun(
@@ -637,8 +657,403 @@ async function getExistingJobKeys(userId: string): Promise<Set<string>> {
         location: job.Location?.label ?? undefined,
       }),
     );
+    // Content fingerprint runs alongside the URL/meta key so an email job with a
+    // different (or absent) link still matches an existing job by company+title.
+    if (job.JobTitle?.label && job.Company?.label) {
+      keys.add(
+        `fp:${contentFingerprint(
+          job.Company.label,
+          job.JobTitle.label,
+          job.Location?.label ?? undefined,
+        )}`,
+      );
+    }
   }
   return keys;
+}
+
+// ---------------------------------------------------------------------------
+// Email-alert source path
+// ---------------------------------------------------------------------------
+
+interface PendingEmailJob {
+  job: EmailAlertJob;
+  messageId: string;
+}
+
+async function runEmailRun(
+  automation: Automation,
+  runId: string,
+  resume: ResumeWithSections,
+  signal: AbortSignal,
+): Promise<RunnerResult> {
+  const emptyStats = {
+    jobsSearched: 0,
+    jobsDeduplicated: 0,
+    jobsProcessed: 0,
+    jobsMatched: 0,
+    jobsSaved: 0,
+  };
+
+  const imap = await db.imapConfig.findUnique({
+    where: { userId: automation.userId },
+  });
+  if (!imap) {
+    automationLogger.log(
+      automation.id,
+      "error",
+      "No IMAP mailbox configured. Add one in settings before running an email automation.",
+    );
+    automationLogger.endRun(automation.id);
+    return await finalizeRun(runId, {
+      status: "failed",
+      errorMessage: "imap_missing",
+      ...emptyStats,
+    });
+  }
+
+  if (!automation.emailFilterType || !automation.emailFilterValue) {
+    automationLogger.log(automation.id, "error", "Email filter is not configured");
+    automationLogger.endRun(automation.id);
+    return await finalizeRun(runId, {
+      status: "failed",
+      errorMessage: "email_filter_missing",
+      ...emptyStats,
+    });
+  }
+
+  let password: string;
+  try {
+    password = decrypt(imap.encryptedPassword, imap.iv);
+  } catch {
+    automationLogger.log(
+      automation.id,
+      "error",
+      "Could not decrypt IMAP password. Re-save the mailbox credentials.",
+    );
+    automationLogger.endRun(automation.id);
+    return await finalizeRun(runId, {
+      status: "failed",
+      errorMessage: "imap_decrypt_failed",
+      ...emptyStats,
+    });
+  }
+
+  const conn: ImapConnectionParams = {
+    host: imap.host,
+    port: imap.port,
+    username: imap.username,
+    password,
+    useTls: imap.useTls,
+  };
+
+  try {
+    const processed = await db.processedAlertEmail.findMany({
+      where: { automationId: automation.id },
+      select: { messageId: true },
+    });
+    const processedIds = new Set(processed.map((p) => p.messageId));
+
+    automationLogger.log(
+      automation.id,
+      "info",
+      `Fetching alert emails (${automation.emailFilterType}: "${automation.emailFilterValue}")...`,
+    );
+
+    const fetchResult = await fetchAlertEmails({
+      conn,
+      filterType: automation.emailFilterType as EmailFilterType,
+      filterValue: automation.emailFilterValue,
+      processedIds,
+      limit: MAX_JOBS_PER_RUN,
+    });
+
+    if (!fetchResult.success) {
+      automationLogger.log(
+        automation.id,
+        "error",
+        `IMAP fetch failed: ${getErrorMessage(fetchResult.error)}`,
+      );
+      automationLogger.endRun(automation.id);
+      return await finalizeRun(runId, {
+        status: getStatusFromError(fetchResult.error),
+        errorMessage:
+          fetchResult.error.type === "network" || fetchResult.error.type === "parse"
+            ? fetchResult.error.message
+            : undefined,
+        blockedReason:
+          fetchResult.error.type === "blocked" ? fetchResult.error.reason : undefined,
+        ...emptyStats,
+      });
+    }
+
+    const emails = fetchResult.data;
+    automationLogger.log(
+      automation.id,
+      "success",
+      `Found ${emails.length} new alert email(s)`,
+    );
+
+    if (emails.length === 0) {
+      automationLogger.log(automation.id, "info", "No new alert emails to process");
+      automationLogger.endRun(automation.id);
+      return await finalizeRun(runId, { status: "completed", ...emptyStats });
+    }
+
+    const aiSettings = await getUserAiSettings(automation.userId);
+    const modelName =
+      aiSettings.model || getDefaultModelForProvider(aiSettings.provider);
+
+    // Extract jobs from each email. A successfully-read email is marked processed
+    // even if it yielded no jobs, so we never re-run the LLM on it; an extraction
+    // *failure* leaves it unmarked to retry next run.
+    const extracted: PendingEmailJob[] = [];
+    const processedMessageIds: string[] = [];
+    let extractionErrors = 0;
+
+    for (const email of emails) {
+      if (signal.aborted) break;
+      const result = await extractJobsFromEmail(
+        email,
+        aiSettings.provider,
+        modelName,
+        automation.userId,
+        signal,
+      );
+      if (!result.success) {
+        const reason = getErrorMessage(result.error);
+        if (reason === "aborted") break;
+        extractionErrors++;
+        automationLogger.log(
+          automation.id,
+          "warning",
+          `Extraction failed for "${email.subject}": ${reason}`,
+        );
+        continue;
+      }
+      processedMessageIds.push(email.messageId);
+      for (const j of result.jobs) {
+        extracted.push({ job: j, messageId: email.messageId });
+      }
+      automationLogger.log(
+        automation.id,
+        "info",
+        `Extracted ${result.jobs.length} job(s) from "${email.subject}"`,
+      );
+    }
+
+    const jobsSearched = extracted.length;
+
+    // Dedup by URL key AND content fingerprint, against existing jobs and within
+    // this batch (the same job commonly arrives in several alert emails).
+    const existingKeys = await getExistingJobKeys(automation.userId);
+    const seen = new Set<string>();
+    const newJobs: PendingEmailJob[] = [];
+    for (const p of extracted) {
+      const company = p.job.company ?? "";
+      const location = p.job.location ?? "";
+      const urlKey = jobDedupeKey({
+        url: p.job.url ?? undefined,
+        title: p.job.title,
+        company,
+        location,
+      });
+      const fpKey = `fp:${contentFingerprint(company, p.job.title, location)}`;
+      if (
+        existingKeys.has(urlKey) ||
+        existingKeys.has(fpKey) ||
+        seen.has(urlKey) ||
+        seen.has(fpKey)
+      ) {
+        continue;
+      }
+      seen.add(urlKey);
+      seen.add(fpKey);
+      newJobs.push(p);
+    }
+    const jobsDeduplicated = newJobs.length;
+
+    automationLogger.log(
+      automation.id,
+      "info",
+      `${jobsSearched} job(s) extracted, ${jobsDeduplicated} new after dedup`,
+      { jobsSearched, jobsDeduplicated },
+    );
+
+    let jobsProcessed = 0;
+    let jobsMatched = 0;
+    let jobsSaved = 0;
+    let aiError: string | null = null;
+
+    const limit = getAutomationMatchLimit(aiSettings.provider);
+
+    const processOne = async (p: PendingEmailJob): Promise<void> => {
+      if (signal.aborted || aiError) return;
+      jobsProcessed++;
+
+      const company = p.job.company ?? "";
+      const location = p.job.location ?? "";
+
+      // Best-effort link follow enriches the snippet; degrades silently to it.
+      let description = p.job.description?.trim() ?? "";
+      if (automation.followLinks && p.job.url) {
+        const full = await followJobLink(p.job.url);
+        if (full) description = full;
+      }
+      if (!description) description = p.job.title;
+
+      const jobDetails: JobDetails = {
+        title: p.job.title,
+        company,
+        location,
+        description,
+        url: p.job.url ?? "",
+      };
+
+      const matchResult = await matchJobToResume(
+        jobDetails,
+        resume,
+        "email",
+        aiSettings,
+        automation.userId,
+        signal,
+      );
+
+      if (signal.aborted) return;
+
+      if (!matchResult.success) {
+        if (matchResult.error === "ai_unavailable") {
+          if (!aiError) {
+            aiError = `AI provider (${aiSettings.provider}) is not available. Please check your settings.`;
+            automationLogger.log(automation.id, "error", aiError);
+          }
+        } else {
+          automationLogger.log(
+            automation.id,
+            "warning",
+            `AI matching failed: ${matchResult.error}`,
+          );
+        }
+        return;
+      }
+
+      const isStrong = matchResult.score >= automation.matchThreshold;
+      if (isStrong) jobsMatched++;
+
+      automationLogger.log(
+        automation.id,
+        isStrong ? "success" : "info",
+        `${p.job.title} at ${company || "?"} — ${matchResult.score}% (${
+          isStrong ? "matched" : "below threshold"
+        })`,
+        { score: matchResult.score, threshold: automation.matchThreshold },
+      );
+
+      try {
+        const scrapedJob: ScrapedJobData = {
+          title: p.job.title,
+          company,
+          location,
+          description,
+          sourceUrl: p.job.url ? normalizeJobUrl(p.job.url) : "",
+          sourceBoard: "email",
+          contentFingerprint: contentFingerprint(company, p.job.title, location),
+        };
+
+        const jobRecord = await mapScrapedJobToJobRecord({
+          scrapedJob,
+          userId: automation.userId,
+          automationId: automation.id,
+          matchScore: matchResult.score,
+          matchData: JSON.stringify({
+            ...matchResult.data,
+            resumeId: resume.id,
+            resumeTitle: resume.title,
+            matchedAt: new Date().toISOString(),
+            provider: aiSettings.provider,
+            model: modelName,
+            sourceMessageId: p.messageId,
+            followedLink: !!(automation.followLinks && p.job.url),
+          }),
+          discoveryStatus: isStrong ? "new" : "below_threshold",
+        });
+
+        await db.job.create({ data: jobRecord });
+        jobsSaved++;
+      } catch (err) {
+        const errorMsg = err instanceof Error ? err.message : "Unknown error";
+        automationLogger.log(
+          automation.id,
+          "error",
+          `Failed to save job: ${errorMsg}`,
+        );
+        console.error("[Email] Failed to save job:", err);
+      }
+    };
+
+    await Promise.allSettled(newJobs.map((p) => limit(() => processOne(p))));
+
+    // Record processed emails so they are never reprocessed. Skipped on abort so
+    // a cancelled run re-reads them next time. De-duped defensively.
+    if (!signal.aborted && processedMessageIds.length > 0) {
+      const unique = Array.from(new Set(processedMessageIds));
+      await db.processedAlertEmail.createMany({
+        data: unique.map((messageId) => ({
+          automationId: automation.id,
+          messageId,
+        })),
+      });
+    }
+
+    if (signal.aborted) {
+      automationLogger.log(automation.id, "warning", "Run aborted by user");
+    }
+
+    const finalStatus: AutomationRunStatus = signal.aborted
+      ? "cancelled"
+      : aiError || extractionErrors > 0
+        ? "completed_with_errors"
+        : jobsProcessed < newJobs.length
+          ? "completed_with_errors"
+          : "completed";
+
+    automationLogger.log(
+      automation.id,
+      finalStatus === "completed" ? "success" : "warning",
+      `Email run finished: ${jobsMatched} matched, ${jobsSaved - jobsMatched} below threshold, ${jobsSaved} saved`,
+      { jobsSearched, jobsDeduplicated, jobsProcessed, jobsMatched, jobsSaved },
+    );
+    automationLogger.endRun(automation.id);
+
+    return await finalizeRun(runId, {
+      status: finalStatus,
+      errorMessage: aiError || undefined,
+      jobsSearched,
+      jobsDeduplicated,
+      jobsProcessed,
+      jobsMatched,
+      jobsSaved,
+    });
+  } catch (error) {
+    if (
+      signal.aborted ||
+      (error instanceof Error && error.name === "AbortError")
+    ) {
+      automationLogger.log(automation.id, "warning", "Run aborted by user");
+      automationLogger.endRun(automation.id);
+      return await finalizeRun(runId, { status: "cancelled", ...emptyStats });
+    }
+
+    const message = error instanceof Error ? error.message : "Unknown error";
+    automationLogger.log(automation.id, "error", `Email run failed: ${message}`);
+    automationLogger.endRun(automation.id);
+    console.error("[Email] Run failed:", error);
+    return await finalizeRun(runId, {
+      status: "failed",
+      errorMessage: message,
+      ...emptyStats,
+    });
+  }
 }
 
 interface GreenhouseRunConfig {
@@ -1099,7 +1514,7 @@ interface MatchResult {
 async function matchJobToResume(
   job: JobDetails,
   resume: ResumeWithSections,
-  sourceBoard: JobBoard,
+  sourceBoard: string,
   aiSettings: AiSettings,
   userId: string,
   signal?: AbortSignal,

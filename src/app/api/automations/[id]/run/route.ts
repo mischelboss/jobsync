@@ -7,7 +7,11 @@ import { runAutomation, getUserAiSettings } from "@/lib/scraper";
 import { PROVIDER_VERIFIERS } from "@/lib/ai/provider-registry.server";
 import { getOllamaBaseUrl } from "@/actions/apiKey.actions";
 import { AiProvider } from "@/models/ai.model";
-import type { JobBoard } from "@/models/automation.model";
+import type {
+  JobBoard,
+  SourceType,
+  EmailFilterType,
+} from "@/models/automation.model";
 import { APP_CONSTANTS } from "@/lib/constants";
 
 const recentRuns = new Map<string, number[]>();
@@ -114,10 +118,14 @@ export async function POST(
       id: automation.id,
       userId: automation.userId,
       name: automation.name,
+      sourceType: automation.sourceType as SourceType,
       jobBoard: automation.jobBoard as JobBoard,
       keywords: automation.keywords,
       location: automation.location,
       sourceConfig: automation.sourceConfig,
+      emailFilterType: automation.emailFilterType as EmailFilterType | null,
+      emailFilterValue: automation.emailFilterValue,
+      followLinks: automation.followLinks,
       resumeId: automation.resumeId,
       matchThreshold: automation.matchThreshold,
       scheduleHour: automation.scheduleHour,

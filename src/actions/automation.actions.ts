@@ -164,12 +164,17 @@ export async function createAutomation(input: CreateAutomationInput): Promise<{
       data: {
         userId: user.id,
         name: validated.name,
-        jobBoard: validated.jobBoard,
+        sourceType: validated.sourceType,
+        // Board columns are non-null; email automations store empty placeholders.
+        jobBoard: validated.jobBoard ?? "",
         keywords: validated.keywords ?? "",
         location: validated.location ?? "",
         sourceConfig: validated.sourceConfig
           ? JSON.stringify(validated.sourceConfig)
           : null,
+        emailFilterType: validated.emailFilterType ?? null,
+        emailFilterValue: validated.emailFilterValue ?? null,
+        followLinks: validated.followLinks ?? false,
         resumeId: validated.resumeId,
         matchThreshold: validated.matchThreshold,
         scheduleHour: validated.scheduleHour,
@@ -395,7 +400,12 @@ export async function getDiscoveredJobs(options?: {
   success: boolean;
   data?: DiscoveredJob[];
   total?: number;
-  statusCounts?: { new: number; dismissed: number; accepted: number };
+  statusCounts?: {
+    new: number;
+    below_threshold: number;
+    dismissed: number;
+    accepted: number;
+  };
   message?: string;
 }> {
   try {
@@ -457,7 +467,12 @@ export async function getDiscoveredJobs(options?: {
       }),
     ]);
 
-    const statusCounts = { new: 0, dismissed: 0, accepted: 0 };
+    const statusCounts = {
+      new: 0,
+      below_threshold: 0,
+      dismissed: 0,
+      accepted: 0,
+    };
     for (const g of grouped) {
       if (g.discoveryStatus && g.discoveryStatus in statusCounts) {
         statusCounts[g.discoveryStatus as keyof typeof statusCounts] = g._count;

@@ -132,6 +132,7 @@ export const JOB_STATUSES = [
 
 export const DISCOVERY_STATUSES = [
   { label: "New", value: "new" },
+  { label: "Below threshold", value: "below_threshold" },
   { label: "Accepted", value: "accepted" },
   { label: "Dismissed", value: "dismissed" },
 ] as const;

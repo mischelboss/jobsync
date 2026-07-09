@@ -103,9 +103,10 @@ export default function AutomationDetailPage() {
   const [jobsLoadingMore, setJobsLoadingMore] = useState(false);
   const [jobStatusCounts, setJobStatusCounts] = useState<{
     new: number;
+    below_threshold: number;
     dismissed: number;
     accepted: number;
-  }>({ new: 0, dismissed: 0, accepted: 0 });
+  }>({ new: 0, below_threshold: 0, dismissed: 0, accepted: 0 });
   const [statusFilter, setStatusFilter] = useState<DiscoveryStatus[]>([
     "new",
     "accepted",
@@ -844,6 +845,7 @@ export default function AutomationDetailPage() {
             dismissedCount={jobStatusCounts.dismissed}
             newCount={jobStatusCounts.new}
             acceptedCount={jobStatusCounts.accepted}
+            belowThresholdCount={jobStatusCounts.below_threshold}
             statusFilter={statusFilter}
             onStatusFilterChange={handleStatusFilterChange}
             automationId={automationId}

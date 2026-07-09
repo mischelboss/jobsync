@@ -91,6 +91,7 @@ interface DiscoveredJobsListProps {
   dismissedCount: number;
   newCount: number;
   acceptedCount: number;
+  belowThresholdCount: number;
   statusFilter: DiscoveryStatus[];
   onStatusFilterChange: (filter: DiscoveryStatus[]) => void;
   automationId: string;
@@ -111,6 +112,7 @@ export function DiscoveredJobsList({
   dismissedCount,
   newCount,
   acceptedCount,
+  belowThresholdCount,
   statusFilter,
   onStatusFilterChange,
   automationId,
@@ -267,7 +269,8 @@ export function DiscoveredJobsList({
     }
   };
 
-  const hasAnyJobs = dismissedCount + newCount + acceptedCount > 0;
+  const hasAnyJobs =
+    dismissedCount + newCount + acceptedCount + belowThresholdCount > 0;
 
   if (!hasAnyJobs) {
     return (

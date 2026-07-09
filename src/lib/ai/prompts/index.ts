@@ -42,3 +42,9 @@ export {
   JOB_IMPORT_SYSTEM_PROMPT,
   buildJobImportPrompt,
 } from "./job-import";
+
+// Email Alert exports (array extraction of multiple jobs per email)
+export {
+  EMAIL_ALERT_SYSTEM_PROMPT,
+  buildEmailAlertPrompt,
+} from "./email-alert";

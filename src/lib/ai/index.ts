@@ -7,8 +7,11 @@ export type {
 export {
   CvImportSchema,
   JobImportSchema,
+  EmailAlertSchema,
   type CvImportResponse,
   type JobImportResponse,
+  type EmailAlertResponse,
+  type EmailAlertJob,
 } from "@/models/ai.schemas";
 export { parseJobMatch } from "./jobMatch/parse";
 
@@ -24,6 +27,8 @@ export {
   buildCvImportPrompt,
   JOB_IMPORT_SYSTEM_PROMPT,
   buildJobImportPrompt,
+  EMAIL_ALERT_SYSTEM_PROMPT,
+  buildEmailAlertPrompt,
 } from "./prompts";
 
 // Analysis tools
