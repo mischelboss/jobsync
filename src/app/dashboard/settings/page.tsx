@@ -3,6 +3,7 @@
 import { useState } from "react";
 import AiSettings from "@/components/settings/AiSettings";
 import ApiKeySettings from "@/components/settings/ApiKeySettings";
+import PromptLibrarySettings from "@/components/settings/PromptLibrarySettings";
 import ImapSettings from "@/components/settings/ImapSettings";
 import DisplaySettings from "@/components/settings/DisplaySettings";
 import McpAccessSettings from "@/components/settings/McpAccessSettings";
@@ -24,6 +25,7 @@ function Settings() {
         <div className="flex-1 min-w-0">
           {activeSection === "ai-provider" && <AiSettings />}
           {activeSection === "api-keys" && <ApiKeySettings />}
+          {activeSection === "prompt-library" && <PromptLibrarySettings />}
           {activeSection === "email-mailbox" && <ImapSettings />}
           {activeSection === "appearance" && <DisplaySettings />}
           {activeSection === "mcp-access" && <McpAccessSettings />}

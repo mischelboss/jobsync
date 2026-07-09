@@ -1,12 +1,13 @@
 "use client";
 
-import { Bot, Key, Mail, Palette, Plug } from "lucide-react";
+import { Bot, FileText, Key, Mail, Palette, Plug } from "lucide-react";
 import { Button } from "../ui/button";
 import { cn } from "@/lib/utils";
 
 export type SettingsSection =
   | "ai-provider"
   | "api-keys"
+  | "prompt-library"
   | "email-mailbox"
   | "appearance"
   | "mcp-access";
@@ -18,6 +19,7 @@ const SETTINGS_SECTIONS: {
 }[] = [
   { id: "ai-provider", label: "AI Provider", icon: Bot },
   { id: "api-keys", label: "API Keys", icon: Key },
+  { id: "prompt-library", label: "Prompt Library", icon: FileText },
   { id: "email-mailbox", label: "Email Mailbox", icon: Mail },
   { id: "appearance", label: "Appearance", icon: Palette },
   { id: "mcp-access", label: "MCP Access", icon: Plug },
