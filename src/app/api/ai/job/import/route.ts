@@ -7,11 +7,10 @@ import { getModel } from "@/lib/ai/providers";
 import { checkRateLimit } from "@/lib/ai/rate-limiter";
 import {
   JobImportSchema,
-  JOB_IMPORT_SYSTEM_PROMPT,
-  buildJobImportPrompt,
   AIUnavailableError,
   extractTextFromPdf,
 } from "@/lib/ai";
+import { resolvePromptPair } from "@/lib/ai/prompts/resolve";
 import {
   resolveCompany,
   resolveJobTitle,
@@ -99,11 +98,15 @@ export const POST = async (req: NextRequest) => {
       userId,
     );
 
+    const { system, prompt } = await resolvePromptPair("job-import", userId, {
+      jobText: extraction.text,
+    });
+
     const { object } = await generateObject({
       model,
       schema: JobImportSchema,
-      system: JOB_IMPORT_SYSTEM_PROMPT,
-      prompt: buildJobImportPrompt(extraction.text),
+      system,
+      prompt,
       temperature: 0.2,
     });
 

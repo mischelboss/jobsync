@@ -3,4 +3,7 @@
  */
 
 export { AUTOMATION_JOB_MATCH_SYSTEM_PROMPT } from "./system";
-export { buildAutomationJobMatchPrompt } from "./user";
+export {
+  AUTOMATION_JOB_MATCH_USER_TEMPLATE,
+  buildAutomationJobMatchPrompt,
+} from "./user";

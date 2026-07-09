@@ -36,6 +36,7 @@ model User {
   Question       Question[]
   McpAccessToken McpAccessToken[]
   ImapConfig     ImapConfig?
+  PromptOverride PromptOverride[]
   defaultResumeId String?
   defaultResume   Resume?          @relation("UserDefaultResume", fields: [defaultResumeId], references: [id], onDelete: SetNull)
 }
@@ -70,6 +71,22 @@ model ApiKey {
   lastUsedAt   DateTime?
 
   @@unique([userId, provider])
+  @@index([userId])
+}
+
+// Per-user customization of an LLM prompt registered in src/lib/ai/prompts/registry.ts.
+// An absent row means the prompt runs on its unmodified default text.
+model PromptOverride {
+  id           String   @id @default(uuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  promptId     String
+  overrideText String?
+  appendText   String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([userId, promptId])
   @@index([userId])
 }
 

@@ -1,2 +1,2 @@
 export { RESUME_IMPORT_SYSTEM_PROMPT } from "./system";
-export { buildResumeImportPrompt } from "./user";
+export { RESUME_IMPORT_USER_TEMPLATE, buildResumeImportPrompt } from "./user";
