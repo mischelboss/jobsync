@@ -65,6 +65,14 @@ const PROVIDERS: ProviderConfig[] = [
     description: "Used for JSearch job discovery automations",
     sensitive: true,
   },
+  {
+    id: "tavily",
+    name: "Tavily",
+    placeholder: "tvly-...",
+    inputType: "password" as const,
+    description: "Used for company & interview-process research in Interview Prep",
+    sensitive: true,
+  },
 ];
 
 function ApiKeySettings() {

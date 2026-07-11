@@ -57,8 +57,11 @@ describe("prompt registry", () => {
       (f) => f.feature,
     );
     expect(structured.sort()).toEqual([
+      "company-research",
       "cv-import",
       "email-alert",
+      "interview-prep",
+      "interview-process",
       "job-import",
       "resume-import",
     ]);
