@@ -25,6 +25,12 @@ import { JOB_IMPORT_SYSTEM_PROMPT } from "./job-import/system";
 import { JOB_IMPORT_USER_TEMPLATE } from "./job-import/user";
 import { EMAIL_ALERT_SYSTEM_PROMPT } from "./email-alert/system";
 import { EMAIL_ALERT_USER_TEMPLATE } from "./email-alert/user";
+import { INTERVIEW_PREP_SYSTEM_PROMPT } from "./interview-prep/system";
+import { INTERVIEW_PREP_USER_TEMPLATE } from "./interview-prep/user";
+import { COMPANY_RESEARCH_SYSTEM_PROMPT } from "./company-research/system";
+import { COMPANY_RESEARCH_USER_TEMPLATE } from "./company-research/user";
+import { INTERVIEW_PROCESS_SYSTEM_PROMPT } from "./interview-process/system";
+import { INTERVIEW_PROCESS_USER_TEMPLATE } from "./interview-process/user";
 
 export type PromptType = "system" | "template";
 
@@ -35,7 +41,10 @@ export type PromptFeature =
   | "resume-import"
   | "cv-import"
   | "job-import"
-  | "email-alert";
+  | "email-alert"
+  | "interview-prep"
+  | "company-research"
+  | "interview-process";
 
 export interface PromptEntry {
   /** Stable identifier persisted in PromptOverride.promptId. Never rename. */
@@ -153,6 +162,43 @@ const FEATURE_SPECS: FeatureSpec[] = [
     systemDescription:
       "Defines how to recognize individual listings inside a newsletter.",
     userDescription: "Wraps the email body being scanned.",
+  },
+  {
+    feature: "interview-prep",
+    label: "Interview Prep",
+    description:
+      "Generates likely interview questions grouped by reliability class, with answer scaffolds, from a CV and a job description.",
+    structuredOutput: true,
+    systemText: INTERVIEW_PREP_SYSTEM_PROMPT,
+    userTemplate: INTERVIEW_PREP_USER_TEMPLATE,
+    systemDescription:
+      "Defines the question categories, the answer-scaffold rules and the company-context rule that gates Class-2 questions.",
+    userDescription:
+      "Wraps the CV, the job description and the (possibly absent) company context.",
+  },
+  {
+    feature: "company-research",
+    label: "Company Research",
+    description:
+      "Extracts a company's mission, values, culture and current situation from fetched web pages (Class-2 enrichment).",
+    structuredOutput: true,
+    systemText: COMPANY_RESEARCH_SYSTEM_PROMPT,
+    userTemplate: COMPANY_RESEARCH_USER_TEMPLATE,
+    systemDescription:
+      "Defines the extraction rules and the ban on inferring beyond the provided text.",
+    userDescription: "Wraps the company name and the fetched page text.",
+  },
+  {
+    feature: "interview-process",
+    label: "Interview Process Research",
+    description:
+      "Reconstructs the interview rounds and their character from anecdotal sources, labelled with confidence (Class-3, best-effort).",
+    structuredOutput: true,
+    systemText: INTERVIEW_PROCESS_SYSTEM_PROMPT,
+    userTemplate: INTERVIEW_PROCESS_USER_TEMPLATE,
+    systemDescription:
+      "Defines the rounds extraction and the confidence/source labelling rules.",
+    userDescription: "Wraps the company name and the fetched source text.",
   },
 ];
 

@@ -22,10 +22,15 @@ import {
 } from "../ui/select";
 import { Label } from "../ui/label";
 import { Button } from "../ui/button";
+import { Switch } from "../ui/switch";
 import { toast } from "../ui/use-toast";
 import { XCircle, Loader2, RefreshCw } from "lucide-react";
 import { checkOllamaConnection } from "@/utils/ai.utils";
-import { getUserSettings, updateAiSettings } from "@/actions/userSettings.actions";
+import {
+  getUserSettings,
+  updateAiSettings,
+  updateResearchSettings,
+} from "@/actions/userSettings.actions";
 
 function AiSettings() {
   const [selectedModel, setSelectedModel] = useState<AiModel>(defaultModel);
@@ -36,6 +41,8 @@ function AiSettings() {
   const [isInitialized, setIsInitialized] = useState(false);
   const [fetchError, setFetchError] = useState<string>("");
   const [connectionError, setConnectionError] = useState<string>("");
+  const [enableProcessResearch, setEnableProcessResearch] = useState(false);
+  const [isSavingResearch, setIsSavingResearch] = useState(false);
 
 
   const setSelectedProvider = (provider: AiProvider) => {
@@ -60,6 +67,11 @@ function AiSettings() {
             provider: aiSettings.provider || defaultModel.provider,
             model: aiSettings.model,
           });
+        }
+        if (settingsResult.success && settingsResult.data?.settings?.research) {
+          setEnableProcessResearch(
+            !!settingsResult.data.settings.research.enableProcessResearch,
+          );
         }
       } catch (error) {
         console.error("Error fetching user settings:", error);
@@ -211,6 +223,40 @@ function AiSettings() {
     }
   };
 
+  const toggleProcessResearch = async (checked: boolean) => {
+    setEnableProcessResearch(checked); // optimistic
+    setIsSavingResearch(true);
+    try {
+      const result = await updateResearchSettings({
+        enableProcessResearch: checked,
+      });
+      if (result?.success) {
+        toast({
+          variant: "success",
+          title: "Saved!",
+          description: `Interview-process research ${checked ? "enabled" : "disabled"}.`,
+        });
+      } else {
+        setEnableProcessResearch(!checked); // revert
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: result?.message || "Failed to save research settings.",
+        });
+      }
+    } catch (error) {
+      console.error("Error saving research settings:", error);
+      setEnableProcessResearch(!checked); // revert
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to save research settings.",
+      });
+    } finally {
+      setIsSavingResearch(false);
+    }
+  };
+
   if (isLoadingSettings) {
     return (
       <div className="space-y-4">
@@ -330,6 +376,37 @@ function AiSettings() {
         {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
         Save
       </Button>
+
+      <div className="mt-8 border-t pt-6">
+        <h3 className="text-lg font-medium">Interview Prep Research</h3>
+        <p className="text-sm text-muted-foreground">
+          Company context (mission, values, situation) is always attempted when
+          you generate interview prep and a Tavily key is configured.
+        </p>
+        <div className="mt-4 flex items-start justify-between gap-4">
+          <div className="space-y-1">
+            <Label htmlFor="process-research">
+              Interview-process research
+            </Label>
+            <p className="text-sm text-muted-foreground max-w-prose">
+              Scrapes anecdotal review sites to estimate the interview rounds.
+              Off by default: the data is thin and some sites disallow scraping.
+              Leave off when sharing this app with others.
+            </p>
+          </div>
+          <div className="flex items-center gap-2 pt-1">
+            {isSavingResearch && (
+              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+            )}
+            <Switch
+              id="process-research"
+              checked={enableProcessResearch}
+              onCheckedChange={toggleProcessResearch}
+              disabled={isSavingResearch}
+            />
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

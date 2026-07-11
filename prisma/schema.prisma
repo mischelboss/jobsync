@@ -37,6 +37,8 @@ model User {
   McpAccessToken McpAccessToken[]
   ImapConfig     ImapConfig?
   PromptOverride PromptOverride[]
+  CompanyResearch CompanyResearch[]
+  InterviewPrep  InterviewPrep[]
   defaultResumeId String?
   defaultResume   Resume?          @relation("UserDefaultResume", fields: [defaultResumeId], references: [id], onDelete: SetNull)
 }
@@ -292,8 +294,53 @@ model Company {
   createdBy       String // userId
   user            User             @relation(fields: [createdBy], references: [id])
   workExperiences WorkExperience[]
+  research        CompanyResearch?
 
   @@unique([value, createdBy])
+}
+
+// Cached research about a company, reused across every job for that company.
+// Company is already per-user (@@unique([value, createdBy])), so a unique
+// companyId row is naturally per-user. All heavy JSON payloads are stored as
+// String columns (same convention as Job.matchData). Context (Class 2) and
+// process (Class 3) go stale and fail independently, hence separate timestamps.
+model CompanyResearch {
+  id             String    @id @default(uuid())
+  companyId      String    @unique
+  company        Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User      @relation(fields: [userId], references: [id])
+
+  // Class-2 enrichment
+  context        String? // JSON: CompanyResearch schema (mission, values, culture, currentSituation)
+  contextAt      DateTime? // TTL clock for company context
+  contextSources String? // JSON: string[] of source URLs
+
+  // Class-3 researched interview process
+  process        String? // JSON: ProcessResearch schema (rounds with confidence + source)
+  processAt      DateTime? // TTL clock for process research
+  websiteUrl     String? // discovered careers/company URL
+
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([userId])
+}
+
+// Per-job interview preparation. One row per job; regenerating upserts it.
+model InterviewPrep {
+  id          String   @id @default(uuid())
+  jobId       String   @unique
+  job         Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+
+  questions   String // JSON: InterviewQuestions (Class 1 + Class 2 arrays)
+  process     String? // JSON: ProcessResearch snapshot shown to the user (Class 3), nullable
+  generatedAt DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([userId])
 }
 
 model JobSource {
@@ -338,6 +385,7 @@ model Job {
   Location    Location?   @relation(fields: [locationId], references: [id])
   locationId  String?
   Interview   Interview[]
+  InterviewPrep InterviewPrep?
   Resume        Resume?      @relation(fields: [resumeId], references: [id])
   resumeId      String?
   CoverLetter   CoverLetter? @relation(fields: [coverLetterId], references: [id])

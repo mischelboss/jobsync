@@ -9,9 +9,16 @@ export interface DisplaySettings {
   theme: "light" | "dark" | "system";
 }
 
+export interface ResearchSettings {
+  /** Class-3 interview-process research (scrapes anecdotal review sites).
+   *  Off by default: legally grey and unreliable, opt-in per the issue. */
+  enableProcessResearch: boolean;
+}
+
 export interface UserSettingsData {
   ai: AiSettings;
   display: DisplaySettings;
+  research: ResearchSettings;
 }
 
 export interface UserSettings {
@@ -26,5 +33,8 @@ export const defaultUserSettings: UserSettingsData = {
   },
   display: {
     theme: "system",
+  },
+  research: {
+    enableProcessResearch: false,
   },
 };
