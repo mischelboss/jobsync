@@ -48,3 +48,21 @@ export {
   EMAIL_ALERT_SYSTEM_PROMPT,
   buildEmailAlertPrompt,
 } from "./email-alert";
+
+// Interview Prep exports (Class 1 + Class 2 grouped interview questions)
+export {
+  INTERVIEW_PREP_SYSTEM_PROMPT,
+  buildInterviewPrepPrompt,
+} from "./interview-prep";
+
+// Company Research exports (Class-2 enrichment extraction)
+export {
+  COMPANY_RESEARCH_SYSTEM_PROMPT,
+  buildCompanyResearchPrompt,
+} from "./company-research";
+
+// Interview Process exports (Class-3 best-effort process extraction)
+export {
+  INTERVIEW_PROCESS_SYSTEM_PROMPT,
+  buildInterviewProcessPrompt,
+} from "./interview-process";

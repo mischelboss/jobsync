@@ -24,6 +24,7 @@ import {
 import { Button } from "../ui/button";
 import {
   ArrowLeft,
+  MessagesSquare,
   MoreVertical,
   Pencil,
   Sparkles,
@@ -33,6 +34,7 @@ import {
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { AiJobMatchSection } from "../profile/AiJobMatchSection";
+import { InterviewPrepSection } from "./InterviewPrepSection";
 import { NotesSection } from "./NotesSection";
 import { useState, useMemo, useCallback } from "react";
 import { DownloadFileButton } from "../profile/DownloadFileButton";
@@ -77,6 +79,7 @@ function JobDetails({
   tags,
 }: JobDetailsProps) {
   const [aiSectionOpen, setAiSectionOpen] = useState(false);
+  const [interviewPrepOpen, setInterviewPrepOpen] = useState(false);
   const [currentMatchScore, setCurrentMatchScore] = useState(job.matchScore);
   const [currentMatchData, setCurrentMatchData] = useState(job.matchData);
   const [currentStatus, setCurrentStatus] = useState(job.Status);
@@ -181,6 +184,17 @@ function JobDetails({
             <Sparkles className="h-3.5 w-3.5" />
             <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">
               Match with AI
+            </span>
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-8 gap-1 cursor-pointer"
+            onClick={() => setInterviewPrepOpen((prev) => !prev)}
+          >
+            <MessagesSquare className="h-3.5 w-3.5" />
+            <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">
+              Interview Prep
             </span>
           </Button>
           <DropdownMenu>
@@ -324,6 +338,7 @@ function JobDetails({
               <MatchDetails matchData={parsedMatchData} />
             </div>
           )}
+          <InterviewPrepSection jobId={job.id} open={interviewPrepOpen} />
           <NotesSection jobId={job.id} openTrigger={noteOpenTrigger} />
           <CardFooter></CardFooter>
         </Card>

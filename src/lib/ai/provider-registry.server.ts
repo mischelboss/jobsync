@@ -138,4 +138,21 @@ export const PROVIDER_VERIFIERS: Record<
       };
     return { success: true };
   },
+
+  tavily: async (key) => {
+    const res = await fetch("https://api.tavily.com/search", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ api_key: key, query: "test", max_results: 1 }),
+    });
+    if (!res.ok)
+      return {
+        success: false,
+        error:
+          res.status === 401 || res.status === 403
+            ? "Invalid API key"
+            : `Tavily returned ${res.status}`,
+      };
+    return { success: true };
+  },
 };

@@ -7,6 +7,7 @@ import {
   defaultUserSettings,
   AiSettings,
   DisplaySettings,
+  ResearchSettings,
 } from "@/models/userSettings.model";
 
 export const getUserSettings = async (): Promise<any | undefined> => {
@@ -83,6 +84,11 @@ export const updateUserSettings = async (
           ...currentSettings.display,
           ...settings.display,
         },
+        research: {
+          ...defaultUserSettings.research,
+          ...currentSettings.research,
+          ...settings.research,
+        },
       };
     } else {
       mergedSettings = {
@@ -90,6 +96,7 @@ export const updateUserSettings = async (
         ...settings,
         ai: { ...defaultUserSettings.ai, ...settings.ai },
         display: { ...defaultUserSettings.display, ...settings.display },
+        research: { ...defaultUserSettings.research, ...settings.research },
       };
     }
 
@@ -129,4 +136,10 @@ export const updateDisplaySettings = async (
   displaySettings: DisplaySettings
 ): Promise<any | undefined> => {
   return updateUserSettings({ display: displaySettings });
+};
+
+export const updateResearchSettings = async (
+  researchSettings: ResearchSettings
+): Promise<any | undefined> => {
+  return updateUserSettings({ research: researchSettings });
 };

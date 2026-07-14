@@ -1,11 +1,6 @@
 import { generateObject } from "ai";
-import {
-  getModel,
-  EmailAlertSchema,
-  EMAIL_ALERT_SYSTEM_PROMPT,
-  buildEmailAlertPrompt,
-  type EmailAlertJob,
-} from "@/lib/ai";
+import { getModel, EmailAlertSchema, type EmailAlertJob } from "@/lib/ai";
+import { resolvePromptPair } from "@/lib/ai/prompts/resolve";
 import type { AiProvider } from "@/models/ai.model";
 import { flattenHtml } from "../greenhouse";
 import type { ScraperError } from "../types";
@@ -37,11 +32,14 @@ export async function extractJobsFromEmail(
 
   try {
     const model = await getModel(provider, modelName, userId);
+    const { system, prompt } = await resolvePromptPair("email-alert", userId, {
+      emailText,
+    });
     const { object } = await generateObject({
       model,
       schema: EmailAlertSchema,
-      system: EMAIL_ALERT_SYSTEM_PROMPT,
-      prompt: buildEmailAlertPrompt(emailText),
+      system,
+      prompt,
       temperature: 0.2,
       abortSignal: signal,
     });
