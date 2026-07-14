@@ -57,6 +57,7 @@ function renderList(
     dismissedCount: 0,
     newCount: 1,
     acceptedCount: 0,
+    belowThresholdCount: 0,
     statusFilter: ["new", "accepted"],
     onStatusFilterChange,
     automationId: "automation-1",

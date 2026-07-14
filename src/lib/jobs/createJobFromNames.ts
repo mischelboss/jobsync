@@ -1,3 +1,4 @@
+import MarkdownIt from "markdown-it";
 import prisma from "@/lib/db";
 import { APP_CONSTANTS } from "@/lib/constants";
 import { normalizeJobUrl } from "@/lib/scraper/utils";
@@ -8,10 +9,15 @@ import {
   resolveLocation,
   resolveJobSource,
   resolveJobType,
+  resolveWorkplaceType,
   resolveJobStatus,
   resolveTags,
   type ResolvedEntity,
 } from "./resolve";
+
+// html:false escapes any raw HTML in the input; TipTapContentViewer further
+// strips unrecognized tags, so the stored/rendered description is safe.
+const md = new MarkdownIt({ html: false, linkify: false, breaks: true });
 
 export interface CreateJobFromNamesInput {
   company: string;
@@ -20,6 +26,7 @@ export interface CreateJobFromNamesInput {
   location?: string;
   source?: string;
   jobType?: string;
+  workplaceType?: string;
   status?: string;
   dueDate?: Date | null;
   applied?: boolean;
@@ -50,6 +57,7 @@ export async function createJobFromNames(
     location,
     source,
     jobType,
+    workplaceType,
     status,
     dueDate = null,
     applied = false,
@@ -61,6 +69,11 @@ export async function createJobFromNames(
     createdVia,
   } = input;
 
+  // Validate synchronously before starting any async resolution work, so an
+  // invalid jobType/workplaceType can't orphan already-started promises.
+  const jobTypeValue = resolveJobType(jobType);
+  const workplaceTypeValue = resolveWorkplaceType(workplaceType);
+
   // Resolve Bucket A and B in parallel where possible
   const [
     resolvedCompany,
@@ -68,7 +81,6 @@ export async function createJobFromNames(
     resolvedLocation,
     resolvedSource,
     resolvedTagsResult,
-    jobTypeValue,
     statusId,
   ] = await Promise.all([
     resolveCompany(company, userId),
@@ -76,7 +88,6 @@ export async function createJobFromNames(
     location ? resolveLocation(location, userId) : Promise.resolve(null),
     source ? resolveJobSource(source, userId) : Promise.resolve(null),
     resolveTags(tags, userId, APP_CONSTANTS.MAX_JOB_TAGS),
-    Promise.resolve(resolveJobType(jobType)),
     resolveJobStatus(status),
   ]);
 
@@ -118,8 +129,12 @@ export async function createJobFromNames(
     salaryRange: salaryRange ?? null,
     dueDate,
     appliedDate: resolvedAppliedDate,
-    description: jobDescription,
+    // Markdown-rendered here, unlike UI-created jobs which store raw
+    // Tiptap HTML directly — both are valid HTML for TipTapContentViewer,
+    // but don't assume Tiptap-specific structure when reading this field.
+    description: md.render(jobDescription),
     jobType: jobTypeValue,
+    workplaceType: workplaceTypeValue,
     userId,
     jobUrl: jobUrl ? normalizeJobUrl(jobUrl) : null,
     applied,

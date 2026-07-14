@@ -15,7 +15,7 @@ export type DiscoveryStatus =
   | "below_threshold"
   | "accepted"
   | "dismissed";
-export type JobBoard = "jsearch" | "greenhouse" | "arbeitsagentur";
+export type JobBoard = "jsearch" | "greenhouse" | "lever" | "arbeitsagentur";
 export type SourceType = "jobboard" | "email";
 export type EmailFilterType = "label" | "sender" | "subject";
 
@@ -34,8 +34,39 @@ export interface GreenhouseSourceConfig {
   saveUnanalyzed?: boolean;
 }
 
+export type LeverHost = "default" | "eu";
+
+export interface LeverCompany {
+  name: string;
+  token: string;
+  host?: LeverHost; // absent/"default" = the common case
+}
+
+// Field-identical to Greenhouse except `companies` carries the extra `host`.
+export interface LeverSourceConfig
+  extends Omit<GreenhouseSourceConfig, "companies"> {
+  companies: LeverCompany[];
+}
+
 export interface SourceConfig {
   greenhouse?: GreenhouseSourceConfig;
+  lever?: LeverSourceConfig;
+}
+
+// Plain, dependency-free ATS-board check. Do NOT import this from
+// ats/registry.ts (that pulls the network-calling search fns into client
+// bundles). Both the client-imported schema and the runner import it here.
+export const ATS_BOARDS: JobBoard[] = ["greenhouse", "lever"];
+export function isAtsBoard(board: JobBoard): boolean {
+  return ATS_BOARDS.includes(board);
+}
+
+// Keyword-search boards: queried with (keywords, location) rather than a
+// company watchlist. Same client-safety rule as ATS_BOARDS above — the network
+// -calling search fns live in search/registry.ts, which is server-only.
+export const SEARCH_BOARDS: JobBoard[] = ["jsearch", "arbeitsagentur"];
+export function isSearchBoard(board: JobBoard): boolean {
+  return SEARCH_BOARDS.includes(board);
 }
 
 export interface Automation {
@@ -100,6 +131,7 @@ export interface DiscoveredJob {
   jobUrl: string | null;
   description: string;
   jobType: string;
+  workplaceType?: string | null;
   createdAt: Date;
   jobTitleId: string;
   companyId: string;
@@ -121,5 +153,7 @@ export interface ScrapedJobData {
   sourceUrl: string;
   sourceBoard: string;
   employmentType?: string;
+  isRemote?: boolean;
+  workplaceType?: string;
   contentFingerprint?: string;
 }

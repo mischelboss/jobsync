@@ -5,10 +5,12 @@ import { APP_CONSTANTS } from "@/lib/constants";
 export const McpAddJobInputShape = {
   company: z.string().min(1, "company is required"),
   jobTitle: z.string().min(1, "jobTitle is required"),
-  jobDescription: z.string().min(10, "jobDescription must be at least 10 characters"),
-  location: z.string().optional().describe("City, province/state, country, or 'Remote'"),
-  source: z.string().optional().describe("Job board or site the listing came from, e.g. 'LinkedIn', 'Indeed', 'company website'"),
+  jobDescription: z.string().min(10, "jobDescription must be at least 10 characters")
+    .describe("The complete job posting text, copied in full — do not summarize, shorten, or paraphrase it. Markdown-formatted is supported; plain text also works."),
+  location: z.string().optional().describe("City, province/state, country, or 'Remote' — e.g. 'Calgary, AB'. Do not include a street address."),
+  source: z.string().optional().describe("Job board or site the listing came from, e.g. 'LinkedIn', 'Indeed', 'company website'. If not stated explicitly, infer it from the job posting's URL/domain when possible instead of leaving it blank."),
   jobType: z.string().optional().describe("Employment type: 'Full-time', 'Part-time', or 'Contract'"),
+  workplaceType: z.string().optional().describe("Work arrangement: 'Remote', 'Hybrid', or 'Onsite'"),
   status: z.string().optional().describe("Application status: draft, applied, interview, offer, rejected, expired, or archived. Defaults to 'draft'"),
   dueDate: z.string().datetime({ offset: true }).optional().describe("Application deadline as an ISO-8601 datetime string"),
   applied: z.boolean().optional().describe("Set true if you have already submitted the application"),
@@ -43,3 +45,23 @@ export const McpAddQuestionInputShape = {
 
 export const McpAddQuestionSchema = z.object(McpAddQuestionInputShape);
 export type McpAddQuestionInput = z.infer<typeof McpAddQuestionSchema>;
+
+// Raw input shape for MCP tool registration (no transforms needed)
+export const McpSaveMatchResultInputShape = {
+  jobId: z.string().min(1).describe("The id of the job returned by add_job."),
+  resumeId: z
+    .string()
+    .min(1)
+    .optional()
+    .describe(
+      "The id of the resume this match was scored against, exactly as given " +
+        "in the add_job directive. Omit only if the directive had none.",
+    ),
+  matchText: z.string().min(20).describe(
+    "Your full match analysis: a leading 'SCORES: match=<0-100> " +
+      "recommendation=<strong|good|partial|weak>' line, then a markdown body.",
+  ),
+};
+
+export const McpSaveMatchResultSchema = z.object(McpSaveMatchResultInputShape);
+export type McpSaveMatchResultInput = z.infer<typeof McpSaveMatchResultSchema>;

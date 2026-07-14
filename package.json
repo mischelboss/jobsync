@@ -1,6 +1,6 @@
 {
   "name": "jobsync",
-  "version": "1.1.13",
+  "version": "1.1.14",
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack -p 3737",
@@ -11,6 +11,10 @@
     "test:e2e": "npx playwright test",
     "test:watch": "vitest",
     "eval:resume-review": "promptfoo eval --config evals/resume-review/promptfooconfig.yaml",
+    "eval:job-match": "promptfoo eval --config evals/job-match/promptfooconfig.yaml",
+    "eval:automation-match": "promptfoo eval --config evals/job-match/automation.promptfooconfig.yaml",
+    "eval:resume-import": "promptfoo eval --config evals/resume-import/promptfooconfig.yaml",
+    "eval:all": "promptfoo eval --config evals/promptfooconfig.yaml",
     "eval:view": "promptfoo view"
   },
   "dependencies": {
@@ -101,7 +105,7 @@
     "jsdom": "^29.1.1",
     "postcss": "^8.4.49",
     "prisma": "^6.19.0",
-    "promptfoo": "^0.119.14",
+    "promptfoo": "^0.121.18",
     "tailwindcss": "^3.4.16",
     "ts-node": "^10.9.2",
     "tsx": "^4.22.4",

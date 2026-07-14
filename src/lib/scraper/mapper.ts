@@ -21,6 +21,10 @@ function normalizeJobType(employmentType?: string): string {
   return JOB_TYPE_ALIASES[key] ?? "FT";
 }
 
+export function normalizeWorkplaceType(isRemote?: boolean): string | null {
+  return isRemote ? "REMOTE" : null;
+}
+
 interface MapperInput {
   scrapedJob: ScrapedJobData;
   userId: string;
@@ -37,6 +41,7 @@ interface MapperOutput {
   jobUrl: string;
   description: string;
   jobType: string;
+  workplaceType: string | null;
   createdAt: Date;
   applied: boolean;
   statusId: string;
@@ -75,6 +80,8 @@ export async function mapScrapedJobToJobRecord(
     jobUrl: scrapedJob.sourceUrl,
     description: scrapedJob.description,
     jobType: normalizeJobType(scrapedJob.employmentType),
+    workplaceType:
+      scrapedJob.workplaceType ?? normalizeWorkplaceType(scrapedJob.isRemote),
     createdAt: new Date(),
     applied: false,
     statusId,

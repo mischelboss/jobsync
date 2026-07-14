@@ -28,14 +28,12 @@ interface ActivitiesTableProps {
   activities: Activity[];
   reloadActivities: () => void;
   onStartActivity: (activityId: string) => void;
-  activityExist: boolean;
 }
 
 function ActivitiesTable({
   activities,
   reloadActivities,
   onStartActivity,
-  activityExist,
 }: ActivitiesTableProps) {
   const [alertOpen, setAlertOpen] = useState(false);
   const [activityIdToDelete, setActivityIdToDelete] = useState<string>();
@@ -76,9 +74,17 @@ function ActivitiesTable({
           <TableRow>
             <TableHead className="hidden md:table-cell">Date</TableHead>
             <TableHead>Activity</TableHead>
-            <TableHead>Project(Activity Type)</TableHead>
-            <TableHead className="hidden md:table-cell">Start Time</TableHead>
-            <TableHead className="hidden md:table-cell">End Time</TableHead>
+            <TableHead className="whitespace-nowrap">
+              Project
+              <br />
+              (Activity Type)
+            </TableHead>
+            <TableHead className="hidden md:table-cell whitespace-nowrap">
+              Start Time
+            </TableHead>
+            <TableHead className="hidden md:table-cell whitespace-nowrap">
+              End Time
+            </TableHead>
             <TableHead>Duration</TableHead>
             <TableHead>
               <span>Actions</span>
@@ -103,10 +109,10 @@ function ActivitiesTable({
                 <TableCell className="font-medium">
                   {(activity.activityType as ActivityType)?.label}
                 </TableCell>
-                <TableCell className="hidden md:table-cell">
+                <TableCell className="hidden md:table-cell whitespace-nowrap">
                   {format(activity.startTime, "p")}
                 </TableCell>
-                <TableCell className="hidden md:table-cell">
+                <TableCell className="hidden md:table-cell whitespace-nowrap">
                   {format(activity.endTime!, "p")}
                 </TableCell>
                 <TableCell>
@@ -115,35 +121,38 @@ function ActivitiesTable({
                     calculateDuration(activity.duration ?? 0)}
                 </TableCell>
                 <TableCell>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button aria-haspopup="true" size="icon" variant="ghost">
-                        <MoreVertical className="h-4 w-4" />
-                        <span className="sr-only">Toggle menu</span>
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-[200px]">
-                      <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                      <DropdownMenuGroup>
-                        <DropdownMenuItem
-                          className="cursor-pointer text-green-600"
-                          onClick={() => onStartActivity(activity.id!)}
-                          disabled={activityExist}
+                  <div className="flex items-center flex-nowrap">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          aria-haspopup="true"
+                          size="icon"
+                          variant="ghost"
                         >
-                          <CirclePlay className="mr-2 h-4 w-4" />
-                          Start Activity
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          className="text-red-600 cursor-pointer"
-                          onClick={() => onDeleteActivity(activity.id!)}
-                        >
-                          <Trash className="mr-2 h-4 w-4" />
-                          Delete
-                        </DropdownMenuItem>
-                      </DropdownMenuGroup>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                  {!activityExist && (
+                          <MoreVertical className="h-4 w-4" />
+                          <span className="sr-only">Toggle menu</span>
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-[200px]">
+                        <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                        <DropdownMenuGroup>
+                          <DropdownMenuItem
+                            className="cursor-pointer text-green-600"
+                            onClick={() => onStartActivity(activity.id!)}
+                          >
+                            <CirclePlay className="mr-2 h-4 w-4" />
+                            Start Activity
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            className="text-red-600 cursor-pointer"
+                            onClick={() => onDeleteActivity(activity.id!)}
+                          >
+                            <Trash className="mr-2 h-4 w-4" />
+                            Delete
+                          </DropdownMenuItem>
+                        </DropdownMenuGroup>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                     <Button
                       title="Start Activity"
                       aria-haspopup="true"
@@ -156,7 +165,7 @@ function ActivitiesTable({
                         <CirclePlay className="text-green-600" />
                       </span>
                     </Button>
-                  )}
+                  </div>
                 </TableCell>
               </TableRow>
             );
