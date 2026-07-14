@@ -3,4 +3,4 @@
  */
 
 export { CV_IMPORT_SYSTEM_PROMPT } from "./system";
-export { buildCvImportPrompt } from "./user";
+export { CV_IMPORT_USER_TEMPLATE, buildCvImportPrompt } from "./user";

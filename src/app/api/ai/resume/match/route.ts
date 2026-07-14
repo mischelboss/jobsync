@@ -7,12 +7,11 @@ import { getModel } from "@/lib/ai/providers";
 import { checkRateLimit } from "@/lib/ai/rate-limiter";
 import { TEMPERATURES } from "@/lib/ai/config";
 import {
-  JOB_MATCH_SYSTEM_PROMPT,
-  buildJobMatchPrompt,
   AIUnavailableError,
   preprocessResume,
   preprocessJob,
 } from "@/lib/ai";
+import { resolvePromptPair } from "@/lib/ai/prompts/resolve";
 import { APP_CONSTANTS } from "@/lib/constants";
 import { getResumeById } from "@/actions/profile.actions";
 import { getJobDetails } from "@/actions/job.actions";
@@ -97,6 +96,11 @@ export const POST = async (req: NextRequest) => {
       userId,
     );
 
+    const { system, prompt } = await resolvePromptPair("job-match", userId, {
+      resumeText,
+      jobDescription: jobText,
+    });
+
     const controller = new AbortController();
     const timer = setTimeout(
       () => controller.abort(),
@@ -108,8 +112,8 @@ export const POST = async (req: NextRequest) => {
     // none of the json/tool-call empty-textStream pitfalls apply.
     const result = streamText({
       model,
-      system: JOB_MATCH_SYSTEM_PROMPT,
-      prompt: buildJobMatchPrompt(resumeText, jobText),
+      system,
+      prompt,
       temperature: TEMPERATURES.FEEDBACK,
       abortSignal: controller.signal,
       providerOptions: {

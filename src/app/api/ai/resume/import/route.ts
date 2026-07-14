@@ -14,10 +14,7 @@ import { ResumeImportSchema } from "@/models/resumeImport.schema";
 import { AiModel } from "@/models/ai.model";
 import prisma from "@/lib/db";
 import { APP_CONSTANTS } from "@/lib/constants";
-import {
-  RESUME_IMPORT_SYSTEM_PROMPT,
-  buildResumeImportPrompt,
-} from "@/lib/ai/prompts/resume-import";
+import { resolvePromptPair } from "@/lib/ai/prompts/resolve";
 
 export const POST = async (req: NextRequest) => {
   const session = await auth();
@@ -115,6 +112,12 @@ export const POST = async (req: NextRequest) => {
       userId,
     );
 
+    const { system, prompt } = await resolvePromptPair(
+      "resume-import",
+      userId,
+      { normalizedText: preprocessResult.data.normalizedText },
+    );
+
     const controller = new AbortController();
     const timer = setTimeout(
       () => controller.abort(),
@@ -129,8 +132,8 @@ export const POST = async (req: NextRequest) => {
     const result = streamText({
       model,
       output: Output.object({ schema: ResumeImportSchema }),
-      system: RESUME_IMPORT_SYSTEM_PROMPT,
-      prompt: buildResumeImportPrompt(preprocessResult.data.normalizedText),
+      system,
+      prompt,
       temperature: TEMPERATURES.ANALYSIS,
       abortSignal: controller.signal,
       providerOptions: {
