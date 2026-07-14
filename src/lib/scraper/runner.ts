@@ -10,9 +10,9 @@ import type {
   EmailFilterType,
 } from "@/models/automation.model";
 import type { ScraperError, JobDetails } from "./types";
-import { searchJSearchJobs } from "./jsearch";
-import { searchBaJobs } from "./ba";
-import { searchGreenhouseJobs } from "./greenhouse";
+import { ATS_PROVIDERS } from "./ats/registry";
+import type { AtsProvider } from "./ats/types";
+import { SEARCH_PROVIDERS } from "./search/registry";
 import { runGreenhousePipeline } from "./greenhouse/pipeline";
 import type { ScoredJob } from "./greenhouse/pipeline";
 import { mapScrapedJobToJobRecord } from "./mapper";
@@ -164,20 +164,47 @@ interface ResumeWithSections extends PrismaResume {
   }>;
 }
 
+// Thrown by runAutomation's atomic claim when another run is already active
+// for this automation. Callers (scheduler, manual-run route) already do their
+// own pre-check for a fast/clean skip, but that check-then-act isn't atomic on
+// its own — two near-simultaneous callers can both pass it before either has
+// written a "running" row. This error signals the loser of that race so it
+// can skip instead of starting a duplicate run.
+export class AutomationAlreadyRunningError extends Error {
+  constructor(automationId: string) {
+    super(`Automation ${automationId} already has an active run`);
+    this.name = "AutomationAlreadyRunningError";
+  }
+}
+
 export async function runAutomation(
   automation: Automation,
   signal?: AbortSignal,
 ): Promise<RunnerResult> {
+  // Atomic claim: a partial unique index (AutomationRun_automationId_active_key,
+  // see migrations/20260710000001_automation_run_single_active) allows at most
+  // one running/cancelling row per automation. A prior SELECT-then-INSERT
+  // $transaction assumed SQLite serializes concurrent write transactions,
+  // but deferred transactions don't take a write lock until the first write,
+  // so two racing callers could both pass the SELECT before either INSERTed —
+  // relying on the DB constraint instead closes that race for good.
+  let run;
+  try {
+    run = await db.automationRun.create({
+      data: {
+        automationId: automation.id,
+        status: "running",
+      },
+    });
+  } catch (error: any) {
+    if (error?.code === "P2002") {
+      throw new AutomationAlreadyRunningError(automation.id);
+    }
+    throw error;
+  }
+
   console.log(`[Automation ${automation.id}] Starting automation run`);
   automationLogger.startRun(automation.id);
-
-  const run = await db.automationRun.create({
-    data: {
-      automationId: automation.id,
-      status: "running",
-    },
-  });
-
   console.log(`[Automation ${automation.id}] Created run with ID: ${run.id}`);
   automationLogger.log(
     automation.id,
@@ -302,6 +329,10 @@ export async function runAutomation(
       `Resume loaded: ${resume.title}`,
     );
 
+    // Three source shapes, three dispatches: email alerts (IMAP + AI extraction),
+    // ATS company watchlists (greenhouse, lever), and keyword-search boards
+    // (jsearch, arbeitsagentur). Email is a sourceType, not a JobBoard, so it is
+    // checked before any board lookup.
     if (automation.sourceType === "email") {
       return await runEmailRun(
         automation,
@@ -311,32 +342,52 @@ export async function runAutomation(
       );
     }
 
-    if (automation.jobBoard === "greenhouse") {
-      return await runGreenhouseRun(
+    const atsProvider = ATS_PROVIDERS[automation.jobBoard];
+    if (atsProvider) {
+      return await runAtsRun(
         automation,
+        atsProvider,
         run.id,
         resume as ResumeWithSections,
         effectiveSignal,
       );
     }
 
+    const searchProvider = SEARCH_PROVIDERS[automation.jobBoard];
+    if (!searchProvider) {
+      automationLogger.log(
+        automation.id,
+        "error",
+        `Unsupported job board: ${automation.jobBoard}`,
+      );
+      automationLogger.endRun(automation.id);
+      return await finalizeRun(run.id, {
+        status: "failed",
+        errorMessage: `unsupported_board:${automation.jobBoard}`,
+        jobsSearched: 0,
+        jobsDeduplicated: 0,
+        jobsProcessed: 0,
+        jobsMatched: 0,
+        jobsSaved: 0,
+      });
+    }
+
     automationLogger.log(
       automation.id,
       "info",
-      `Searching for jobs: "${automation.keywords}" in ${automation.location}`,
+      `Searching ${searchProvider.label} for jobs: "${automation.keywords}" in ${automation.location}`,
     );
 
-    // Both JSearch and Bundesagentur return full job details up front, so they
-    // share the same downstream dedup/match/save pipeline. Bundesagentur is
-    // free and needs no key; JSearch uses the user's RapidAPI key if available.
-    const searchResult =
-      automation.jobBoard === "arbeitsagentur"
-        ? await searchBaJobs(automation.keywords, automation.location)
-        : await searchJSearchJobs(
-            automation.keywords,
-            automation.location,
-            await resolveApiKey(automation.userId, "rapidapi"),
-          );
+    // Keyword-search boards return full job details up front, so they all share
+    // the dedup/match/save pipeline below. Keyless boards (Bundesagentur) declare
+    // no apiKeyService; JSearch resolves the user's RapidAPI key.
+    const searchResult = await searchProvider.search(
+      automation.keywords,
+      automation.location,
+      searchProvider.apiKeyService
+        ? await resolveApiKey(automation.userId, searchProvider.apiKeyService)
+        : undefined,
+    );
 
     if (!searchResult.success) {
       automationLogger.log(
@@ -370,11 +421,7 @@ export async function runAutomation(
     automationLogger.log(
       automation.id,
       "success",
-      `Found ${jobsSearched} jobs from ${
-        automation.jobBoard === "arbeitsagentur"
-          ? "Bundesagentur für Arbeit"
-          : "JSearch API"
-      }`,
+      `Found ${jobsSearched} jobs from ${searchProvider.label}`,
       { jobsSearched },
     );
 
@@ -516,6 +563,7 @@ export async function runAutomation(
           sourceUrl: normalizeJobUrl(job.url),
           sourceBoard: automation.jobBoard as JobBoard,
           employmentType: job.employmentType,
+          isRemote: job.isRemote,
         };
 
         const jobRecord = await mapScrapedJobToJobRecord({
@@ -542,7 +590,16 @@ export async function runAutomation(
           `Job saved successfully (${jobsSaved} total)`,
           { jobsSaved },
         );
-      } catch (err) {
+      } catch (err: any) {
+        if (err?.code === "P2002") {
+          // Another concurrent run already saved this URL first.
+          automationLogger.log(
+            automation.id,
+            "info",
+            "Job skipped - already saved by a concurrent run",
+          );
+          return;
+        }
         const errorMsg = err instanceof Error ? err.message : "Unknown error";
         automationLogger.log(
           automation.id,
@@ -1056,8 +1113,8 @@ async function runEmailRun(
   }
 }
 
-interface GreenhouseRunConfig {
-  companies: { name: string; token: string }[];
+interface AtsRunConfig {
+  companies: { name: string; token: string; host?: "default" | "eu" }[];
   targetTitles: string[];
   keywords: string[];
   locations: string[];
@@ -1066,25 +1123,26 @@ interface GreenhouseRunConfig {
   saveUnanalyzed: boolean;
 }
 
-function parseGreenhouseConfig(
-  sourceConfig?: string | null,
-): GreenhouseRunConfig | null {
+function parseAtsConfig(
+  sourceConfig: string | null | undefined,
+  jobBoard: JobBoard,
+): AtsRunConfig | null {
   if (!sourceConfig) return null;
   try {
     const parsed = JSON.parse(sourceConfig);
-    const gh = parsed?.greenhouse;
-    if (!gh || !Array.isArray(gh.companies)) return null;
+    const cfg = parsed?.[jobBoard];
+    if (!cfg || !Array.isArray(cfg.companies)) return null;
     return {
-      companies: gh.companies,
-      targetTitles: Array.isArray(gh.targetTitles) ? gh.targetTitles : [],
-      keywords: Array.isArray(gh.keywords) ? gh.keywords : [],
-      locations: Array.isArray(gh.locations) ? gh.locations : [],
-      strictLocation: !!gh.strictLocation,
+      companies: cfg.companies,
+      targetTitles: Array.isArray(cfg.targetTitles) ? cfg.targetTitles : [],
+      keywords: Array.isArray(cfg.keywords) ? cfg.keywords : [],
+      locations: Array.isArray(cfg.locations) ? cfg.locations : [],
+      strictLocation: !!cfg.strictLocation,
       topK:
-        typeof gh.topK === "number" && gh.topK > 0
-          ? gh.topK
+        typeof cfg.topK === "number" && cfg.topK > 0
+          ? cfg.topK
           : APP_CONSTANTS.MAX_JOBS_PER_RUN,
-      saveUnanalyzed: gh.saveUnanalyzed !== false,
+      saveUnanalyzed: cfg.saveUnanalyzed !== false,
     };
   } catch {
     return null;
@@ -1115,12 +1173,17 @@ function scalePrerank(raw: number): number {
   return Math.min(99, Math.max(0, Math.round((raw / PRERANK_MAX) * 99)));
 }
 
+// Returns false (instead of throwing) when a concurrent run already saved
+// this exact URL first — the Job_userId_jobUrl_automation_key partial unique
+// index (migrations/20260710000002_job_automation_url_unique) is the
+// backstop for that race, since app-level dedup only sees a point-in-time
+// snapshot of existing URLs.
 async function persistDiscoveredJob(
   automation: Automation,
   job: JobDetails,
   matchScore: number,
   matchData: object,
-): Promise<void> {
+): Promise<boolean> {
   const scrapedJob: ScrapedJobData = {
     title: job.title,
     company: job.company,
@@ -1129,6 +1192,8 @@ async function persistDiscoveredJob(
     sourceUrl: normalizeJobUrl(job.url),
     sourceBoard: automation.jobBoard,
     employmentType: job.employmentType,
+    isRemote: job.isRemote,
+    workplaceType: job.workplaceType,
   };
 
   const jobRecord = await mapScrapedJobToJobRecord({
@@ -1139,22 +1204,30 @@ async function persistDiscoveredJob(
     matchData: JSON.stringify(matchData),
   });
 
-  await db.job.create({ data: jobRecord });
+  try {
+    await db.job.create({ data: jobRecord });
+    return true;
+  } catch (err: any) {
+    if (err?.code === "P2002") return false;
+    throw err;
+  }
 }
 
-async function runGreenhouseRun(
+async function runAtsRun(
   automation: Automation,
+  provider: AtsProvider,
   runId: string,
   resume: ResumeWithSections,
   signal?: AbortSignal,
 ): Promise<RunnerResult> {
-  const config = parseGreenhouseConfig(automation.sourceConfig);
+  const label = `[${provider.label}]`;
+  const config = parseAtsConfig(automation.sourceConfig, automation.jobBoard);
 
   if (!config || config.companies.length === 0) {
     automationLogger.log(
       automation.id,
       "error",
-      "[Greenhouse] No companies configured",
+      `${label} No companies configured`,
     );
     automationLogger.endRun(automation.id);
     return await finalizeRun(runId, {
@@ -1172,16 +1245,16 @@ async function runGreenhouseRun(
     automationLogger.log(
       automation.id,
       "info",
-      `[Greenhouse] Fetching ${config.companies.length} companies...`,
+      `${label} Fetching ${config.companies.length} companies...`,
     );
 
-    const { jobs, errors } = await searchGreenhouseJobs(config.companies);
+    const { jobs, errors } = await provider.search(config.companies);
 
     for (const err of errors) {
       automationLogger.log(
         automation.id,
         "warning",
-        `[Greenhouse] Board '${err.token}' ${err.reason} — skipped`,
+        `${label} Board '${err.token}' ${err.reason} — skipped`,
       );
     }
 
@@ -1189,7 +1262,7 @@ async function runGreenhouseRun(
     automationLogger.log(
       automation.id,
       "success",
-      `[Greenhouse] Fetched ${jobsSearched} jobs across ${config.companies.length} boards`,
+      `${label} Fetched ${jobsSearched} jobs across ${config.companies.length} boards`,
       { jobsSearched },
     );
 
@@ -1201,7 +1274,7 @@ async function runGreenhouseRun(
     automationLogger.log(
       automation.id,
       "info",
-      `[Greenhouse] ${jobsDeduplicated} new jobs after dedup`,
+      `${label} ${jobsDeduplicated} new jobs after dedup`,
       { jobsDeduplicated },
     );
 
@@ -1209,7 +1282,7 @@ async function runGreenhouseRun(
       automationLogger.log(
         automation.id,
         "info",
-        "[Greenhouse] All fetched jobs already saved — nothing new to process",
+        `${label} All fetched jobs already saved — nothing new to process`,
       );
       automationLogger.endRun(automation.id);
       return await finalizeRun(runId, {
@@ -1232,14 +1305,14 @@ async function runGreenhouseRun(
       automationLogger.log(
         automation.id,
         "info",
-        `[Greenhouse] ${pipeline.funnel.located} jobs remaining after strict location filter`,
+        `${label} ${pipeline.funnel.located} jobs remaining after strict location filter`,
       );
     }
 
     automationLogger.log(
       automation.id,
       "info",
-      `[Greenhouse] ${pipeline.funnel.relevant} jobs cleared the relevance floor`,
+      `${label} ${pipeline.funnel.relevant} jobs cleared the relevance floor`,
     );
 
     const buildFunnel = (analyzed: number, highlighted: number): string => {
@@ -1282,7 +1355,7 @@ async function runGreenhouseRun(
       automationLogger.log(
         automation.id,
         "warning",
-        `[Greenhouse] No relevant jobs found — ${reason}. Run complete.`,
+        `${label} No relevant jobs found — ${reason}. Run complete.`,
       );
       automationLogger.endRun(automation.id);
       return await finalizeRun(runId, {
@@ -1311,14 +1384,14 @@ async function runGreenhouseRun(
       automationLogger.log(
         automation.id,
         "warning",
-        "[Greenhouse] Run aborted by user",
+        `${label} Run aborted by user`,
       );
     }
     if (config.saveUnanalyzed) {
       for (const scored of pipeline.toSaveUnanalyzed) {
         if (signal?.aborted) break;
         try {
-          await persistDiscoveredJob(
+          const saved = await persistDiscoveredJob(
             automation,
             scored.job,
             scalePrerank(scored.score),
@@ -1328,9 +1401,9 @@ async function runGreenhouseRun(
               analyzed: false,
             },
           );
-          jobsSaved++;
+          if (saved) jobsSaved++;
         } catch (err) {
-          console.error("[Greenhouse] Failed to save listing:", err);
+          console.error(`${label} Failed to save listing:`, err);
         }
       }
     }
@@ -1340,7 +1413,7 @@ async function runGreenhouseRun(
     automationLogger.log(
       automation.id,
       "info",
-      `[Greenhouse] Running LLM analysis on top ${totalToAnalyze}...`,
+      `${label} Running LLM analysis on top ${totalToAnalyze}...`,
     );
 
     const analyzeJob = async (scored: ScoredJob): Promise<void> => {
@@ -1350,7 +1423,7 @@ async function runGreenhouseRun(
 
       const saveUnanalyzed = async () => {
         try {
-          await persistDiscoveredJob(
+          const saved = await persistDiscoveredJob(
             automation,
             scored.job,
             scalePrerank(scored.score),
@@ -1360,9 +1433,9 @@ async function runGreenhouseRun(
               analyzed: false,
             },
           );
-          jobsSaved++;
+          if (saved) jobsSaved++;
         } catch (err) {
-          console.error("[Greenhouse] Failed to save listing:", err);
+          console.error(`${label} Failed to save listing:`, err);
         }
       };
 
@@ -1374,7 +1447,7 @@ async function runGreenhouseRun(
       automationLogger.log(
         automation.id,
         "info",
-        `[Greenhouse] Analyzing: ${scored.job.title} at ${scored.job.company}`,
+        `${label} Analyzing: ${scored.job.title} at ${scored.job.company}`,
       );
 
       const matchResult = await matchJobToResume(
@@ -1403,7 +1476,7 @@ async function runGreenhouseRun(
           automationLogger.log(
             automation.id,
             "warning",
-            `[Greenhouse] LLM match failed: ${matchResult.error}`,
+            `${label} LLM match failed: ${matchResult.error}`,
           );
         }
         await saveUnanalyzed();
@@ -1417,25 +1490,30 @@ async function runGreenhouseRun(
       automationLogger.log(
         automation.id,
         isStrong ? "success" : "info",
-        `[Greenhouse] Analyzed ${analyzed}/${totalToAnalyze}: ${scored.job.title} — ${matchResult.score}%`,
+        `${label} Analyzed ${analyzed}/${totalToAnalyze}: ${scored.job.title} — ${matchResult.score}%`,
         { score: matchResult.score, threshold: automation.matchThreshold },
       );
 
       try {
-        await persistDiscoveredJob(automation, scored.job, matchResult.score, {
-          ...matchResult.data,
-          resumeId: resume.id,
-          resumeTitle: resume.title,
-          matchedAt: new Date().toISOString(),
-          provider: aiSettings.provider,
-          model: modelName,
-          prerankScore: scored.score,
-          prerankComponents: scored.components,
-          analyzed: true,
-        });
-        jobsSaved++;
+        const saved = await persistDiscoveredJob(
+          automation,
+          scored.job,
+          matchResult.score,
+          {
+            ...matchResult.data,
+            resumeId: resume.id,
+            resumeTitle: resume.title,
+            matchedAt: new Date().toISOString(),
+            provider: aiSettings.provider,
+            model: modelName,
+            prerankScore: scored.score,
+            prerankComponents: scored.components,
+            analyzed: true,
+          },
+        );
+        if (saved) jobsSaved++;
       } catch (err) {
-        console.error("[Greenhouse] Failed to save analyzed job:", err);
+        console.error(`${label} Failed to save analyzed job:`, err);
       }
     };
 
@@ -1447,14 +1525,14 @@ async function runGreenhouseRun(
       automationLogger.log(
         automation.id,
         "warning",
-        "[Greenhouse] Run aborted by user",
+        `${label} Run aborted by user`,
       );
     }
 
     automationLogger.log(
       automation.id,
       "success",
-      `[Greenhouse] LLM analysis complete (${analyzed}/${pipeline.toAnalyze.length} succeeded)`,
+      `${label} LLM analysis complete (${analyzed}/${pipeline.toAnalyze.length} succeeded)`,
     );
 
     automationLogger.endRun(automation.id);
@@ -1472,7 +1550,7 @@ async function runGreenhouseRun(
   } catch (error) {
     // An abort surfaces here as an AbortError; finalize as cancelled, not failed.
     if (signal?.aborted || (error instanceof Error && error.name === "AbortError")) {
-      automationLogger.log(automation.id, "warning", "[Greenhouse] Run aborted by user");
+      automationLogger.log(automation.id, "warning", `${label} Run aborted by user`);
       automationLogger.endRun(automation.id);
       return await finalizeRun(runId, {
         status: "cancelled",
@@ -1488,10 +1566,10 @@ async function runGreenhouseRun(
     automationLogger.log(
       automation.id,
       "error",
-      `[Greenhouse] Run failed: ${message}`,
+      `${label} Run failed: ${message}`,
     );
     automationLogger.endRun(automation.id);
-    console.error("[Greenhouse] Run failed:", error);
+    console.error(`${label} Run failed:`, error);
     return await finalizeRun(runId, {
       status: "failed",
       errorMessage: message,

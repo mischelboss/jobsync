@@ -14,6 +14,7 @@ import {
 } from "@/models/skills.schema";
 import { getCurrentUser } from "@/utils/user.utils";
 import { APP_CONSTANTS } from "@/lib/constants";
+import { resumeDetailInclude } from "@/lib/jobs/resumeDetailInclude";
 import {
   buildInsufficientSectionsMessage,
   hasMinResumeSections,
@@ -198,33 +199,33 @@ export const getResumeById = async (
         id: resumeId,
         profile: { userId: user.id },
       },
-      include: {
-        ContactInfo: true,
-        File: true,
-        ResumeSections: {
-          include: {
-            summary: true,
-            workExperiences: {
-              include: {
-                jobTitle: true,
-                Company: true,
-                location: true,
-              },
-            },
-            educations: {
-              include: {
-                location: true,
-              },
-            },
-            licenseOrCertifications: true,
-            skills: { include: { Tag: true } },
-          },
-        },
-      },
+      include: resumeDetailInclude,
     });
     return { data: resume, success: true };
   } catch (error) {
     const msg = "Failed to get resume.";
+    return handleError(error, msg);
+  }
+};
+
+export const saveResumeReviewResult = async (
+  resumeId: string,
+  reviewData: string,
+): Promise<any | undefined> => {
+  try {
+    const user = await getCurrentUser();
+    if (!user) {
+      throw new Error("Not authenticated");
+    }
+
+    await prisma.resume.update({
+      where: { id: resumeId, profile: { userId: user.id } },
+      data: { reviewData },
+    });
+
+    return { success: true };
+  } catch (error) {
+    const msg = "Failed to save review result.";
     return handleError(error, msg);
   }
 };

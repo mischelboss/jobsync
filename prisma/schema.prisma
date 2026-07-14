@@ -104,6 +104,7 @@ model Resume {
   Job            Job[]
   Automation     Automation[]
   defaultForUser User[]          @relation("UserDefaultResume")
+  reviewData     String?
 }
 
 model CoverLetter {
@@ -305,6 +306,7 @@ model Job {
   jobUrl      String?
   description String
   jobType     String
+  workplaceType String?
   createdAt   DateTime
   applied     Boolean     @default(false)
   appliedDate DateTime?
@@ -346,6 +348,9 @@ model Job {
   @@index([userId, automationId])
   @@index([userId, discoveryStatus])
   @@index([userId, contentFingerprint])
+  // Also has a hand-written partial unique index (not expressible here):
+  // UNIQUE(userId, jobUrl) WHERE automationId IS NOT NULL
+  // See migrations/20260710000002_job_automation_url_unique
 }
 
 model ActivityType {
@@ -379,7 +384,7 @@ model Activity {
   activityType   ActivityType @relation(fields: [activityTypeId], references: [id])
   activityTypeId String
 
-  taskId String? @unique
+  taskId String?
   task   Task?   @relation(fields: [taskId], references: [id])
 }
 
@@ -398,7 +403,7 @@ model Task {
   activityTypeId String?
   activityType   ActivityType? @relation(fields: [activityTypeId], references: [id])
 
-  activity Activity?
+  activities Activity[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -483,6 +488,9 @@ model AutomationRun {
 
   @@index([automationId])
   @@index([startedAt])
+  // Also has a hand-written partial unique index (not expressible here):
+  // UNIQUE(automationId) WHERE status IN ('running', 'cancelling')
+  // See migrations/20260710000001_automation_run_single_active
 }
 
 model Note {

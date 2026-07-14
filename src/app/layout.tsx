@@ -6,12 +6,9 @@ import { ThemeProvider } from "@/components/theme-provider";
 
 export const dynamic = "force-dynamic";
 
-// Self-hosted Inter (variable, latin) so production/Docker builds don't fetch
-// from Google Fonts at build time (avoids network-dependent build failures).
 const inter = localFont({
-  src: "./fonts/inter-latin-variable.woff2",
+  src: "./fonts/Inter-Variable.woff2",
   variable: "--font-inter",
-  display: "swap",
   weight: "100 900",
 });
 

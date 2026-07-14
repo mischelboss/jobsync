@@ -14,6 +14,7 @@ import Loading from "../Loading";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useSheetAutoScroll } from "@/hooks/useSheetAutoScroll";
 import { useResizablePanel } from "@/hooks/useResizablePanel";
+import { APP_CONSTANTS } from "@/lib/constants";
 import { toast } from "../ui/use-toast";
 import { Resume } from "@/models/profile.model";
 import { AiModel, AiProvider, defaultModel } from "@/models/ai.model";
@@ -24,6 +25,7 @@ import {
 } from "@/utils/streamResumeReview.utils";
 import { checkOllamaConnection } from "@/utils/ai.utils";
 import { getUserSettings } from "@/actions/userSettings.actions";
+import { saveResumeReviewResult } from "@/actions/profile.actions";
 import { useSlowResponseWarning } from "@/hooks/useSlowResponseWarning";
 import { SlowResponseWarning } from "../common/SlowResponseWarning";
 import {
@@ -33,9 +35,10 @@ import {
 
 interface AiSectionProps {
   resume: Resume;
+  onReviewSaved?: (reviewData: string) => void;
 }
 
-const AiResumeReviewSection = ({ resume }: AiSectionProps) => {
+const AiResumeReviewSection = ({ resume, onReviewSaved }: AiSectionProps) => {
   const [aISectionOpen, setAiSectionOpen] = useState(false);
   const [ollamaConnected, setOllamaConnected] = useState<boolean | null>(null);
   const [connectionError, setConnectionError] = useState<string>("");
@@ -93,6 +96,38 @@ const AiResumeReviewSection = ({ resume }: AiSectionProps) => {
     setIsLoading(false);
   }, []);
 
+  const saveReview = useCallback(
+    (reviewResult: ResumeReviewResult) => {
+      const scores = reviewResult.scores;
+      if (!scores) return;
+
+      const reviewData = JSON.stringify({
+        overall: scores.overall,
+        impact: scores.impact,
+        clarity: scores.clarity,
+        atsCompatibility: scores.atsCompatibility,
+        body: reviewResult.body,
+        reviewedAt: new Date().toISOString(),
+        provider: selectedModel.provider,
+        model: selectedModel.model,
+      });
+
+      saveResumeReviewResult(resume.id!, reviewData).then((res) => {
+        if (res?.success) {
+          onReviewSaved?.(reviewData);
+          toast({ title: "Review saved" });
+        } else {
+          toast({
+            variant: "destructive",
+            title: "Error!",
+            description: res?.message || "Failed to save review",
+          });
+        }
+      });
+    },
+    [resume.id, onReviewSaved, selectedModel.provider, selectedModel.model],
+  );
+
   const getResumeReview = async () => {
     if (!resume || !hasMinResumeSections(resume.ResumeSections?.length)) {
       warnInsufficientResumeSections(
@@ -109,12 +144,14 @@ const AiResumeReviewSection = ({ resume }: AiSectionProps) => {
     setIsLoading(true);
 
     try {
-      await streamResumeReview({
+      const reviewResult = await streamResumeReview({
         resumeId: resume.id!,
         selectedModel,
         signal: controller.signal,
         onUpdate: setResult,
       });
+      if (controller.signal.aborted) return;
+      saveReview(reviewResult);
     } catch (err) {
       // Aborting (e.g. closing the sheet) is expected — don't toast.
       if (controller.signal.aborted) return;
@@ -181,7 +218,10 @@ const AiResumeReviewSection = ({ resume }: AiSectionProps) => {
       <SheetPortal>
         <SheetContent
           className="flex flex-col p-0 overflow-hidden [&>button:last-child]:hidden"
-          style={{ width: `${width}px`, maxWidth: "none" }}
+          style={{
+            width: `${width}px`,
+            maxWidth: `${APP_CONSTANTS.RESIZABLE_PANEL_MAX_WIDTH_RATIO * 100}vw`,
+          }}
         >
           {/* VS Code-style drag handle on left edge */}
           <div

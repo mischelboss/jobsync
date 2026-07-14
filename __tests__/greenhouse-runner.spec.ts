@@ -94,6 +94,7 @@ const automation: Automation = {
   id: "auto1",
   userId: "user1",
   name: "GH",
+  sourceType: "jobboard",
   jobBoard: "greenhouse",
   keywords: "",
   location: "",

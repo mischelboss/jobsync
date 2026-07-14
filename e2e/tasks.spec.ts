@@ -1,18 +1,5 @@
-import { test, expect, type Page } from "@playwright/test";
-
-test.beforeEach(async ({ page, baseURL }) => {
-  await page.goto("/");
-  await login(page);
-  await expect(page).toHaveURL(baseURL + "/dashboard");
-});
-
-async function login(page: Page) {
-  await page.getByPlaceholder("id@example.com").click();
-  await page.getByPlaceholder("id@example.com").fill("admin@example.com");
-  await page.getByRole("textbox", { name: "Password" }).click();
-  await page.getByRole("textbox", { name: "Password" }).fill("password123");
-  await page.getByRole("button", { name: "Login" }).click();
-}
+import { type Page } from "@playwright/test";
+import { test, expect, uniqueName, type CleanupRegistry } from "./fixtures";
 
 async function navigateToTasks(page: Page) {
   await page.goto("/dashboard/tasks");
@@ -23,6 +10,7 @@ async function navigateToTasks(page: Page) {
 async function createTask(
   page: Page,
   title: string,
+  cleanup: CleanupRegistry,
   options?: { activityType?: string },
 ) {
   await page.getByTestId("add-task-btn").click({ force: true });
@@ -38,18 +26,25 @@ async function createTask(
     await page
       .getByPlaceholder("Create or Search activityType")
       .fill(options.activityType);
-    await page.waitForTimeout(500);
+    const createOption = page.getByText(`Create: ${options.activityType}`);
     const existingOption = page.getByRole("option", {
       name: options.activityType,
       exact: true,
     });
-    const createOption = page.getByText(`Create: ${options.activityType}`);
+    // Deterministic wait for the debounced list instead of a fixed timeout.
+    await expect(createOption.or(existingOption).first()).toBeVisible();
     if (await existingOption.isVisible()) {
       await existingOption.click({ force: true });
-    } else if (await createOption.isVisible()) {
+    } else {
       await createOption.click({ force: true });
     }
-    await page.waitForTimeout(300);
+    // Creating runs a server action inside a React transition; the popover only
+    // closes once it resolves. Wait for that so the task saves with the type
+    // committed (slow against the dev server under parallel load).
+    await expect(
+      page.getByPlaceholder("Create or Search activityType"),
+    ).not.toBeVisible({ timeout: 15000 });
+    cleanup.activityType(options.activityType);
   }
 
   const saveBtn = page.getByTestId("save-task-btn");
@@ -58,6 +53,7 @@ async function createTask(
   await expect(page.getByTestId("task-form-dialog-title")).not.toBeVisible({
     timeout: 10000,
   });
+  cleanup.task(title);
 }
 
 async function deleteTask(page: Page, title: string) {
@@ -71,25 +67,23 @@ async function deleteTask(page: Page, title: string) {
 }
 
 test.describe("Tasks Management", () => {
-  const testTaskTitle = "E2E Test Task";
-
-  test("should create a new task", async ({ page }) => {
+  test("should create a new task", async ({ page, cleanup }) => {
+    const testTaskTitle = uniqueName("E2E Test Task");
     await navigateToTasks(page);
-    await createTask(page, testTaskTitle);
+    await createTask(page, testTaskTitle, cleanup);
 
-    // Wait for the task to appear in the table
     await expect(
       page.getByRole("row", { name: new RegExp(testTaskTitle, "i") }).first(),
     ).toBeVisible({ timeout: 10000 });
-
-    // Clean up
-    await deleteTask(page, testTaskTitle);
   });
 
-  test("should edit an existing task", async ({ page }) => {
-    const editTaskTitle = "E2E Edit Task";
+  test("should edit an existing task", async ({ page, cleanup }) => {
+    const editTaskTitle = uniqueName("E2E Edit Task");
+    const updatedTitle = uniqueName("E2E Edit Task Updated");
+    // Register the updated title too, since it's what the row becomes on success.
+    cleanup.task(updatedTitle);
     await navigateToTasks(page);
-    await createTask(page, editTaskTitle);
+    await createTask(page, editTaskTitle, cleanup);
     await expect(
       page.getByRole("row", { name: new RegExp(editTaskTitle, "i") }).first(),
     ).toBeVisible({ timeout: 10000 });
@@ -107,7 +101,6 @@ test.describe("Tasks Management", () => {
       editTaskTitle,
     );
 
-    const updatedTitle = "E2E Edit Task Updated";
     const titleInput = page.getByPlaceholder("Enter task title");
     await titleInput.fill(updatedTitle);
     await titleInput.blur();
@@ -122,29 +115,29 @@ test.describe("Tasks Management", () => {
     await expect(
       page.getByRole("row", { name: new RegExp(updatedTitle, "i") }).first(),
     ).toBeVisible({ timeout: 10000 });
-
-    await deleteTask(page, updatedTitle);
   });
 
-  test("should delete a task", async ({ page }) => {
-    const deleteTaskTitle = "E2E Delete Task";
+  test("should delete a task", async ({ page, cleanup }) => {
+    const deleteTaskTitle = uniqueName("E2E Delete Task");
+    // Registered as a safety net; the test deletes the task via the UI below
+    // and the cleanup API is idempotent if the row is already gone.
     await navigateToTasks(page);
-    await createTask(page, deleteTaskTitle);
+    await createTask(page, deleteTaskTitle, cleanup);
     await expect(
       page.getByRole("row", { name: new RegExp(deleteTaskTitle, "i") }).first(),
     ).toBeVisible({ timeout: 10000 });
 
     await deleteTask(page, deleteTaskTitle);
 
-    await expect(page.getByRole("status").first()).toContainText(
-      /Task has been deleted/,
-    );
+    await expect(
+      page.getByRole("row", { name: new RegExp(deleteTaskTitle, "i") }),
+    ).not.toBeVisible();
   });
 
-  test("should change task status via dropdown", async ({ page }) => {
-    const statusTaskTitle = "E2E Status Task";
+  test("should change task status via dropdown", async ({ page, cleanup }) => {
+    const statusTaskTitle = uniqueName("E2E Status Task");
     await navigateToTasks(page);
-    await createTask(page, statusTaskTitle);
+    await createTask(page, statusTaskTitle, cleanup);
     await expect(
       page.getByRole("row", { name: new RegExp(statusTaskTitle, "i") }).first(),
     ).toBeVisible({ timeout: 10000 });
@@ -154,18 +147,22 @@ test.describe("Tasks Management", () => {
       .getByTestId("task-actions-menu-btn")
       .first()
       .click({ force: true });
-    await page
-      .getByRole("menuitem", { name: "Change Status" })
-      .click({ force: true });
-    await page
-      .getByRole("menuitem", { name: "Needs Attention" })
-      .click({ force: true });
+    // Radix submenus open on hover; clicking the subtrigger can toggle it
+    // shut mid-open, so hover to open then wait for the item.
+    await page.getByRole("menuitem", { name: "Change Status" }).hover();
+    const needsAttentionItem = page.getByRole("menuitem", {
+      name: "Needs Attention",
+    });
+    await expect(needsAttentionItem).toBeVisible();
+    await needsAttentionItem.click();
 
-    await expect(page.getByRole("status").first()).toContainText(
-      /Task status updated/,
-    );
-
-    await deleteTask(page, statusTaskTitle);
+    // Assert on the persistent status badge rather than the toast, which
+    // auto-dismisses after 5s and can vanish before the poll under load.
+    await expect(
+      page
+        .getByRole("row", { name: new RegExp(statusTaskTitle, "i") })
+        .getByText("Needs Attention"),
+    ).toBeVisible();
   });
 
   test("should filter tasks by status", async ({ page }) => {
@@ -195,10 +192,13 @@ test.describe("Tasks Management", () => {
     await expect(completeCheckbox).toBeChecked();
   });
 
-  test("should toggle task completion via checkbox", async ({ page }) => {
-    const toggleTaskTitle = "E2E Toggle Task";
+  test("should toggle task completion via checkbox", async ({
+    page,
+    cleanup,
+  }) => {
+    const toggleTaskTitle = uniqueName("E2E Toggle Task");
     await navigateToTasks(page);
-    await createTask(page, toggleTaskTitle);
+    await createTask(page, toggleTaskTitle, cleanup);
     await expect(
       page.getByRole("row", { name: new RegExp(toggleTaskTitle, "i") }).first(),
     ).toBeVisible({ timeout: 10000 });
@@ -211,19 +211,11 @@ test.describe("Tasks Management", () => {
     });
     await completeBtn.click({ force: true });
 
-    await expect(page.getByRole("status").first()).toContainText(
-      /Task status updated/,
-    );
-
-    await page
-      .getByRole("button", { name: "Status", exact: true })
-      .click({ force: true });
-    await page
-      .getByRole("menuitemcheckbox", { name: "Complete" })
-      .click({ force: true });
-    await page.keyboard.press("Escape");
-
-    await deleteTask(page, toggleTaskTitle);
+    // The button's label flips on success; assert that instead of the toast,
+    // which auto-dismisses after 5s and can vanish before the poll under load.
+    await expect(
+      taskRow.getByRole("button", { name: "Mark as in progress" }),
+    ).toBeVisible();
   });
 
   test.describe.serial("Task Activity Integration", () => {
@@ -250,11 +242,12 @@ test.describe("Tasks Management", () => {
 
     test("should start activity from task and redirect to activities", async ({
       page,
-    }, testInfo) => {
-      const activityTaskTitle = `E2E Start Activity Task ${testInfo.project.name}`;
+      cleanup,
+    }) => {
+      const activityTaskTitle = uniqueName("E2E Start Activity Task");
       await navigateToTasks(page);
-      await createTask(page, activityTaskTitle, {
-        activityType: "E2E Testing",
+      await createTask(page, activityTaskTitle, cleanup, {
+        activityType: uniqueName("E2E Testing"),
       });
       await expect(
         page
@@ -270,26 +263,21 @@ test.describe("Tasks Management", () => {
         .getByTestId("task-start-activity-btn")
         .click({ force: true });
 
-      await expect(page.getByRole("status").first()).toContainText(
-        /Activity started from task/,
-      );
       await expect(page).toHaveURL(/\/dashboard\/activities/);
 
-      // Stop the running activity
+      // Stop the running activity (the linked activity row is removed by the
+      // cleanup fixture along with the task).
       await page.getByRole("button", { name: "Stop" }).click({ force: true });
-
-      // Go back and delete the task
-      await navigateToTasks(page);
-      await deleteTask(page, activityTaskTitle);
     });
 
-    test("should not allow starting activity when task already has linked activity", async ({
+    test("should restart activity when task already has a linked activity", async ({
       page,
-    }, testInfo) => {
-      const linkedActivityTaskTitle = `E2E Linked Activity Task ${testInfo.project.name}`;
+      cleanup,
+    }) => {
+      const linkedActivityTaskTitle = uniqueName("E2E Linked Activity Task");
       await navigateToTasks(page);
-      await createTask(page, linkedActivityTaskTitle, {
-        activityType: "E2E Testing",
+      await createTask(page, linkedActivityTaskTitle, cleanup, {
+        activityType: uniqueName("E2E Testing"),
       });
       await expect(
         page
@@ -305,13 +293,16 @@ test.describe("Tasks Management", () => {
       await taskRow
         .getByTestId("task-start-activity-btn")
         .click({ force: true });
-      await expect(page.getByRole("status").first()).toContainText(
-        /Activity started from task/,
-      );
       await expect(page).toHaveURL(/\/dashboard\/activities/);
 
-      // Stop the activity so we can test the linked state
+      // Stop the activity so we can test restarting from the task. Wait for
+      // the global activity banner to actually clear before proceeding —
+      // under parallel test load the stop server action can lag behind the
+      // click, and starting again while it's still in flight makes the app
+      // (correctly) show the activity-switch confirm dialog instead of
+      // restarting directly.
       await page.getByRole("button", { name: "Stop" }).click({ force: true });
+      await expect(page.getByRole("button", { name: "Stop" })).not.toBeVisible();
 
       // Go back to tasks
       await navigateToTasks(page);
@@ -319,50 +310,30 @@ test.describe("Tasks Management", () => {
         .getByRole("row", { name: new RegExp(linkedActivityTaskTitle, "i") })
         .first();
 
-      // Start activity button should not be visible (task has linked activity)
+      // Start activity button is still available even with a linked activity
       await taskRowAfter.hover();
       await expect(
         taskRowAfter.getByTestId("task-start-activity-btn"),
-      ).not.toBeVisible();
+      ).toBeVisible();
 
-      // Menu item should be disabled
+      // Clicking it restarts the activity (redirects to activities page)
       await taskRowAfter
-        .getByTestId("task-actions-menu-btn")
+        .getByTestId("task-start-activity-btn")
         .click({ force: true });
-      const startActivityMenuItem = page.getByRole("menuitem", {
-        name: "Start Activity",
-      });
-      await expect(startActivityMenuItem).toBeDisabled();
-      await page.keyboard.press("Escape");
+      await expect(page).toHaveURL(/\/dashboard\/activities/);
 
-      // Cleanup: delete the activity first, then the task
-      await page.goto("/dashboard/activities");
-      await page.waitForLoadState("networkidle");
-      await page.getByTestId("add-activity-btn").waitFor({ state: "visible" });
-      const activityRow = page
-        .getByRole("row", {
-          name: new RegExp(linkedActivityTaskTitle, "i"),
-        })
-        .first();
-      await activityRow
-        .getByRole("button", { name: "Toggle menu" })
-        .click({ force: true });
-      await page
-        .getByRole("menuitem", { name: "Delete" })
-        .click({ force: true });
-      await page.getByRole("button", { name: "Delete" }).click({ force: true });
-
-      await navigateToTasks(page);
-      await deleteTask(page, linkedActivityTaskTitle);
+      // Stop the restarted activity to leave a clean state
+      await page.getByRole("button", { name: "Stop" }).click({ force: true });
     });
 
     test("should not allow starting activity on completed task", async ({
       page,
-    }, testInfo) => {
-      const completedTaskTitle = `E2E Completed Task ${testInfo.project.name}`;
+      cleanup,
+    }) => {
+      const completedTaskTitle = uniqueName("E2E Completed Task");
       await navigateToTasks(page);
-      await createTask(page, completedTaskTitle, {
-        activityType: "E2E Testing",
+      await createTask(page, completedTaskTitle, cleanup, {
+        activityType: uniqueName("E2E Testing"),
       });
       await expect(
         page
@@ -377,9 +348,11 @@ test.describe("Tasks Management", () => {
       await taskRow
         .getByRole("button", { name: "Mark as complete" })
         .click({ force: true });
-      await expect(page.getByRole("status").first()).toContainText(
-        /Task status updated/,
-      );
+      // Button label flips on success; assert that rather than the transient
+      // toast so the following steps run against a committed status.
+      await expect(
+        taskRow.getByRole("button", { name: "Mark as in progress" }),
+      ).toBeVisible();
 
       // Add Complete status to filter to see completed tasks
       await page
@@ -404,8 +377,6 @@ test.describe("Tasks Management", () => {
       await expect(page.getByRole("status").first()).toContainText(
         /Cannot start an activity from a completed or cancelled task/,
       );
-
-      await deleteTask(page, completedTaskTitle);
     });
   });
 });

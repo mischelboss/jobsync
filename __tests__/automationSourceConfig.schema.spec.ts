@@ -2,6 +2,7 @@ import { CreateAutomationSchema } from "@/models/automation.schema";
 
 const base = {
   name: "Test",
+  sourceType: "jobboard",
   resumeId: "550e8400-e29b-41d4-a716-446655440000",
   matchThreshold: 80,
   scheduleHour: 8,

@@ -76,6 +76,17 @@ export const APP_CONSTANTS = {
   GREENHOUSE_FETCH_TIMEOUT_MS: 25_000, // per-board AbortController timeout
   GREENHOUSE_FETCH_CONCURRENCY: 5,
 
+  // Lever job source
+  LEVER_BASE_URL: "https://api.lever.co/v0/postings",
+  LEVER_EU_BASE_URL: "https://api.eu.lever.co/v0/postings",
+  LEVER_JOB_URL: "https://jobs.lever.co", // public posting page (not API)
+  LEVER_EU_JOB_URL: "https://jobs.eu.lever.co", // EU public posting page (not API)
+  LEVER_PAGE_LIMIT: 100, // Lever's max page size
+  LEVER_MAX_PAGES: 10, // safety ceiling: 10 * 100 = 1000 jobs/board
+  LEVER_PAGE_DELAY_MS: 150, // politeness delay between sequential pages
+  LEVER_FETCH_TIMEOUT_MS: 25_000, // wraps the WHOLE paginated loop per board
+  LEVER_FETCH_CONCURRENCY: 5,
+
   // MCP server settings
   MCP_DUPLICATE_WINDOW_DAYS: 30,
   MCP_TOKEN_EXPIRY_PRESETS: [30, 90, 365] as const,
@@ -85,6 +96,8 @@ export const APP_CONSTANTS = {
   MCP_RATE_LIMIT_WINDOW_MS: 60 * 60 * 1000,
   MCP_DEFAULT_JOB_TYPE: "Full-time",
   MCP_DEFAULT_STATUS: "draft",
+  MCP_MATCH_MIN_DESCRIPTION_LENGTH: 200,
+  MCP_MATCH_PROVIDER_MARKER: "mcp",
 
   // File uploads
   UPLOADS_DIR: process.env.NODE_ENV !== "production" ? "data" : "/data",
@@ -100,6 +113,11 @@ export const APP_CONSTANTS = {
   RESUME_IMPORT_MAX_DOCX_ENTRIES: 1_000,
   RESUME_IMPORT_MAX_DOCX_UNCOMPRESSED_BYTES: 100 * 1024 * 1024, // 100 MB
   RESUME_IMPORT_EXTRACT_TIMEOUT_MS: 30_000, // 30 seconds
+
+  // Resizable panel (AI job match / resume review sheets)
+  RESIZABLE_PANEL_DEFAULT_WIDTH: 450,
+  RESIZABLE_PANEL_MIN_WIDTH: 320,
+  RESIZABLE_PANEL_MAX_WIDTH_RATIO: 0.9,
 } as const;
 
 export const SCHEDULER_CONSTANTS = {

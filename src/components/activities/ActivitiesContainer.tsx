@@ -1,9 +1,10 @@
 "use client";
 import ActivitiesTable from "./ActivitiesTable";
-import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
+import { Card, CardContent, CardTitle } from "../ui/card";
+import { ResponsiveCardHeader } from "../ResponsiveCardHeader";
 import { Button } from "../ui/button";
-import { Input } from "../ui/input";
-import { Loader, PlusCircle, Search } from "lucide-react";
+import { Loader, PlusCircle } from "lucide-react";
+import { SearchInput } from "../SearchInput";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Dialog,
@@ -20,6 +21,7 @@ import Loading from "../Loading";
 import { APP_CONSTANTS } from "@/lib/constants";
 import { RecordsCount } from "../RecordsCount";
 import { useActivity } from "@/context/ActivityContext";
+import { useActivitySwitchConfirm } from "@/hooks/useActivitySwitchConfirm";
 
 function ActivitiesContainer() {
   const [activityFormOpen, setActivityFormOpen] = useState<boolean>(false);
@@ -33,6 +35,7 @@ function ActivitiesContainer() {
   const sentinelRef = useRef<HTMLDivElement>(null);
 
   const { currentActivity, startActivity } = useActivity();
+  const { requestStart, confirmDialog } = useActivitySwitchConfirm();
   const prevActivityRef = useRef<Activity | undefined>(undefined);
 
   const closeActivityForm = () => setActivityFormOpen(false);
@@ -76,11 +79,13 @@ function ActivitiesContainer() {
     await loadActivities(1, APP_CONSTANTS.RECORDS_PER_PAGE, searchTerm || undefined);
   }, [loadActivities, searchTerm]);
 
-  const handleStartActivity = async (activityId: string) => {
-    const success = await startActivity(activityId);
-    if (success) {
-      reloadActivities();
-    }
+  const handleStartActivity = (activityId: string) => {
+    requestStart(async () => {
+      const success = await startActivity(activityId);
+      if (success) {
+        reloadActivities();
+      }
+    });
   };
 
   useEffect(() => {
@@ -142,24 +147,19 @@ function ActivitiesContainer() {
 
   return (
     <Card>
-      <CardHeader className="flex-row justify-between items-center">
+      <ResponsiveCardHeader>
         <div className="flex items-baseline gap-2">
           <CardTitle>Activities</CardTitle>
           {!initialLoading && totalActivities > 0 && (
             <RecordsCount count={activitiesList.length} total={totalActivities} label="activities" />
           )}
         </div>
-        <div className="flex items-center gap-2">
-          <div className="relative">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input
-              type="search"
-              placeholder="Search activities..."
-              className="pl-8 h-8 w-[150px] lg:w-[200px]"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
-          </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <SearchInput
+            value={searchTerm}
+            onChange={setSearchTerm}
+            placeholder="Search activities..."
+          />
           <Dialog open={activityFormOpen} onOpenChange={setActivityFormOpen}>
             <DialogTrigger asChild>
               <Button
@@ -187,7 +187,7 @@ function ActivitiesContainer() {
             </DialogContent>
           </Dialog>
         </div>
-      </CardHeader>
+      </ResponsiveCardHeader>
       <CardContent>
         {initialLoading && <Loading />}
         {activitiesList.length > 0 && (
@@ -196,7 +196,6 @@ function ActivitiesContainer() {
               activities={activitiesList}
               reloadActivities={reloadActivities}
               onStartActivity={handleStartActivity}
-              activityExist={Boolean(currentActivity)}
             />
           </>
         )}
@@ -208,6 +207,7 @@ function ActivitiesContainer() {
           </div>
         )}
       </CardContent>
+      {confirmDialog}
     </Card>
   );
 }

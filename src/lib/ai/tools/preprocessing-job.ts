@@ -4,7 +4,7 @@
  * Normalizes, validates, and extracts metadata from job descriptions
  */
 
-import { JobResponse } from "@/models/job.model";
+import { JobResponse, WORKPLACE_TYPES } from "@/models/job.model";
 import {
   removeHtmlTags,
   normalizeWhitespace,
@@ -45,14 +45,20 @@ export const convertJobToText = (job: JobResponse): Promise<string> => {
       description,
       JobTitle: { label: jobTitle },
       Company: { label: companyName },
-      Location: { label: location },
+      Location,
+      workplaceType,
     } = job;
+
+    const workplaceTypeLine =
+      workplaceType && workplaceType in WORKPLACE_TYPES
+        ? `Workplace Type: ${WORKPLACE_TYPES[workplaceType as keyof typeof WORKPLACE_TYPES]}\n`
+        : "";
+    const locationLine = Location ? `Location: ${Location.label}\n` : "";
 
     const jobText = `
 Job Title: ${jobTitle}
 Company: ${companyName}
-Location: ${location}
-Description: ${removeHtmlTags(description)}
+${locationLine}${workplaceTypeLine}Description: ${removeHtmlTags(description)}
     `;
 
     return resolve(jobText);

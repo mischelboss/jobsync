@@ -12,6 +12,7 @@ import {
   JobStatus,
   JobTitle,
   Tag,
+  getWorkplaceTypeLabel,
 } from "@/models/job.model";
 import { TipTapContentViewer } from "../TipTapContentViewer";
 import {
@@ -164,6 +165,7 @@ function JobDetails({
         return "Unknown";
     }
   };
+
   return (
     <>
       <div className="flex justify-between">
@@ -242,19 +244,27 @@ function JobDetails({
       </div>
       {job?.id && (
         <Card className="col-span-3">
-          <CardHeader className="flex-row justify-between relative">
+          <CardHeader className="flex-row items-center justify-between relative">
             <div>
               {job?.Company?.label}
               <CardTitle>{job?.JobTitle?.label}</CardTitle>
               <CardDescription>
-                {job?.Location?.label} - {getJobType(job?.jobType)}
+                {job?.Location?.label && `${job.Location.label} - `}
+                {getJobType(job?.jobType)}
+                {job?.workplaceType && ` · ${getWorkplaceTypeLabel(job.workplaceType)}`}
               </CardDescription>
             </div>
             <div className="flex flex-col items-end gap-2">
               {currentMatchScore != null && (
                 <div className="flex flex-col items-center gap-1">
                   <CircularScore score={currentMatchScore} size="md" />
-                  <span className="text-xs text-muted-foreground">AI Match</span>
+                  {parsedMatchData?.recommendation ? (
+                    <Badge variant="outline" className="capitalize">
+                      {parsedMatchData.recommendation}
+                    </Badge>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">AI Match</span>
+                  )}
                 </div>
               )}
               {job?.Resume && job?.Resume?.File && job.Resume?.File?.filePath
@@ -266,7 +276,19 @@ function JobDetails({
                 : null}
             </div>
           </CardHeader>
-          <h3 className="ml-4">
+          {job.jobUrl && (
+            <div className="my-3 ml-4">
+              <span className="font-semibold mr-2">Job URL:</span>
+              <a
+                href={formatUrl(job.jobUrl)}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                {job.jobUrl}
+              </a>
+            </div>
+          )}
+          <h3 className="ml-4 flex flex-wrap items-center gap-2">
             {job.dueDate && new Date() > job.dueDate && currentStatus?.value === "draft" ? (
               <StatusBadge
                 label="Expired"
@@ -280,9 +302,15 @@ function JobDetails({
                 className="w-[70px] justify-center"
               />
             )}
-            <span className="ml-2">
-              {job?.appliedDate ? format(new Date(job?.appliedDate), "PP") : ""}
-            </span>
+            {job?.appliedDate && (
+              <span>{format(new Date(job.appliedDate), "PP")}</span>
+            )}
+            {job.createdVia && (
+              <Badge className="gap-1 bg-violet-500 dark:bg-violet-400">
+                <Sparkles className="h-3.5 w-3.5" />
+                via {job.createdVia}
+              </Badge>
+            )}
           </h3>
           {job.tags && job.tags.length > 0 && (
             <div className="my-3 ml-4 flex flex-wrap gap-1">
@@ -291,25 +319,6 @@ function JobDetails({
                   {tag.label}
                 </Badge>
               ))}
-            </div>
-          )}
-          {job.createdVia && (
-            <div className="my-1 ml-4">
-              <Badge variant="outline" className="text-xs text-muted-foreground">
-                via {job.createdVia}
-              </Badge>
-            </div>
-          )}
-          {job.jobUrl && (
-            <div className="my-3 ml-4">
-              <span className="font-semibold mr-2">Job URL:</span>
-              <a
-                href={formatUrl(job.jobUrl)}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                {job.jobUrl}
-              </a>
             </div>
           )}
           <div className="my-4 ml-4">

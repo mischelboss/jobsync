@@ -1,16 +1,15 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 import {
   Card,
   CardContent,
   CardFooter,
-  CardHeader,
   CardTitle,
 } from "../ui/card";
 import { Button } from "../ui/button";
-import { ListFilter, Loader, PlusCircle, Filter, Search } from "lucide-react";
-import { Input } from "../ui/input";
+import { ListFilter, Loader, PlusCircle, Filter } from "lucide-react";
+import { SearchInput } from "../SearchInput";
+import { ResponsiveCardHeader } from "../ResponsiveCardHeader";
 import {
   deleteTaskById,
   getTaskById,
@@ -45,6 +44,7 @@ import TasksTable from "./TasksTable";
 import { TaskForm } from "./TaskForm";
 import { ActivityType } from "@/models/activity.model";
 import { useActivity } from "@/context/ActivityContext";
+import { useActivitySwitchConfirm } from "@/hooks/useActivitySwitchConfirm";
 
 type TasksContainerProps = {
   activityTypes: ActivityType[];
@@ -61,8 +61,8 @@ function TasksContainer({
   onFilterChange,
   onTasksChanged,
 }: TasksContainerProps) {
-  const router = useRouter();
   const { refreshCurrentActivity } = useActivity();
+  const { requestStart, confirmDialog } = useActivitySwitchConfirm();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [page, setPage] = useState(1);
   const [totalTasks, setTotalTasks] = useState(0);
@@ -185,22 +185,23 @@ function TasksContainer({
     }
   };
 
-  const onStartActivity = async (taskId: string) => {
-    const { success, message } = await startActivityFromTask(taskId);
-    if (success) {
-      await refreshCurrentActivity();
-      toast({
-        variant: "success",
-        description: "Activity started from task",
-      });
-      router.push("/dashboard/activities");
-    } else {
-      toast({
-        variant: "destructive",
-        title: "Error!",
-        description: message,
-      });
-    }
+  const onStartActivity = (taskId: string) => {
+    requestStart(async () => {
+      const { success, message } = await startActivityFromTask(taskId);
+      if (success) {
+        await refreshCurrentActivity();
+        toast({
+          variant: "success",
+          description: "Activity started from task",
+        });
+      } else {
+        toast({
+          variant: "destructive",
+          title: "Error!",
+          description: message,
+        });
+      }
+    });
   };
 
   const resetEditTask = () => {
@@ -282,7 +283,7 @@ function TasksContainer({
   return (
     <>
       <Card x-chunk="dashboard-tasks-chunk-0" className="h-full">
-        <CardHeader className="flex-row justify-between items-center">
+        <ResponsiveCardHeader>
           <div className="flex items-baseline gap-2">
             <CardTitle>Tasks</CardTitle>
             {!initialLoading && totalTasks > 0 && (
@@ -293,97 +294,90 @@ function TasksContainer({
               />
             )}
           </div>
-          <div className="flex items-center">
-            <div className="ml-auto flex items-center gap-2">
-              <div className="relative">
-                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input
-                  type="search"
-                  placeholder="Search tasks..."
-                  className="pl-8 h-8 w-[150px] lg:w-[200px]"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                />
-              </div>
-              {mounted ? (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="outline" size="sm" className="h-8 gap-1">
-                      <Filter className="h-3.5 w-3.5" />
-                      <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">
-                        Status
-                      </span>
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuLabel>Filter by Status</DropdownMenuLabel>
-                    <DropdownMenuSeparator />
-                    {(Object.keys(TASK_STATUSES) as TaskStatus[]).map(
-                      (status) => (
-                        <DropdownMenuCheckboxItem
-                          key={status}
-                          checked={statusFilter.includes(status)}
-                          onCheckedChange={() => toggleStatusFilter(status)}
-                        >
-                          {TASK_STATUSES[status]}
-                        </DropdownMenuCheckboxItem>
-                      ),
-                    )}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              ) : (
-                <Button variant="outline" size="sm" className="h-8 gap-1">
-                  <Filter className="h-3.5 w-3.5" />
-                  <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">
-                    Status
-                  </span>
-                </Button>
-              )}
-              {mounted ? (
-                <Select value={groupBy} onValueChange={onGroupByChange}>
-                  <SelectTrigger className="w-[140px] h-8">
-                    <ListFilter className="h-3.5 w-3.5" />
-                    <SelectValue placeholder="Group by" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectGroup>
-                      <SelectLabel>Group by</SelectLabel>
-                      <SelectSeparator />
-                      <SelectItem value="none">None</SelectItem>
-                      <SelectItem value="createdDate">Created Date</SelectItem>
-                      <SelectItem value="dueDate">Due Date</SelectItem>
-                      <SelectItem value="updatedDate">Updated Date</SelectItem>
-                      <SelectItem value="activityType">
-                        Activity Type
-                      </SelectItem>
-                    </SelectGroup>
-                  </SelectContent>
-                </Select>
-              ) : (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-8 gap-1 w-[140px]"
-                >
-                  <ListFilter className="h-3.5 w-3.5" />
-                  <span>Group by</span>
-                </Button>
-              )}
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-8 gap-1"
-                onClick={addTaskForm}
-                data-testid="add-task-btn"
-              >
-                <PlusCircle className="h-3.5 w-3.5" />
+          <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
+            <SearchInput
+              value={searchTerm}
+              onChange={setSearchTerm}
+              placeholder="Search tasks..."
+            />
+            {mounted ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" className="h-8 gap-1">
+                    <Filter className="h-3.5 w-3.5" />
+                    <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">
+                      Status
+                    </span>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuLabel>Filter by Status</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  {(Object.keys(TASK_STATUSES) as TaskStatus[]).map(
+                    (status) => (
+                      <DropdownMenuCheckboxItem
+                        key={status}
+                        checked={statusFilter.includes(status)}
+                        onCheckedChange={() => toggleStatusFilter(status)}
+                      >
+                        {TASK_STATUSES[status]}
+                      </DropdownMenuCheckboxItem>
+                    ),
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : (
+              <Button variant="outline" size="sm" className="h-8 gap-1">
+                <Filter className="h-3.5 w-3.5" />
                 <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">
-                  New Task
+                  Status
                 </span>
               </Button>
-            </div>
+            )}
+            {mounted ? (
+              <Select value={groupBy} onValueChange={onGroupByChange}>
+                <SelectTrigger className="w-[140px] h-8">
+                  <ListFilter className="h-3.5 w-3.5" />
+                  <SelectValue placeholder="Group by" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectLabel>Group by</SelectLabel>
+                    <SelectSeparator />
+                    <SelectItem value="none">None</SelectItem>
+                    <SelectItem value="createdDate">Created Date</SelectItem>
+                    <SelectItem value="dueDate">Due Date</SelectItem>
+                    <SelectItem value="updatedDate">Updated Date</SelectItem>
+                    <SelectItem value="activityType">
+                      Activity Type
+                    </SelectItem>
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            ) : (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 gap-1 w-[140px]"
+              >
+                <ListFilter className="h-3.5 w-3.5" />
+                <span>Group by</span>
+              </Button>
+            )}
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 gap-1"
+              onClick={addTaskForm}
+              data-testid="add-task-btn"
+            >
+              <PlusCircle className="h-3.5 w-3.5" />
+              <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">
+                New Task
+              </span>
+            </Button>
           </div>
-        </CardHeader>
+        </ResponsiveCardHeader>
         <CardContent>
           {initialLoading && <Loading />}
           {!initialLoading && tasks.length > 0 && (
@@ -421,6 +415,7 @@ function TasksContainer({
         dialogOpen={dialogOpen}
         setDialogOpen={setDialogOpen}
       />
+      {confirmDialog}
     </>
   );
 }

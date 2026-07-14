@@ -5,6 +5,7 @@ import { format } from "date-fns";
 import { APP_CONSTANTS, DISCOVERY_STATUSES } from "@/lib/constants";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/StatusBadge";
 import { CircularScore } from "@/components/CircularScore";
 import { getDiscoveryStatusBadgeColor } from "@/lib/badge-colors";
@@ -49,6 +50,7 @@ import {
   Trash2,
 } from "lucide-react";
 import type { DiscoveredJob, DiscoveryStatus } from "@/models/automation.model";
+import { getWorkplaceTypeLabel } from "@/models/job.model";
 import {
   acceptDiscoveredJob,
   dismissDiscoveredJob,
@@ -297,7 +299,7 @@ export function DiscoveredJobsList({
   return (
     <Card>
       <CardHeader>
-        <div className="flex items-start justify-between gap-4">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="space-y-1.5">
             <CardTitle>Discovered Jobs</CardTitle>
             {totalJobs > 0 && (
@@ -308,7 +310,7 @@ export function DiscoveredJobsList({
               />
             )}
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {dismissedCount + newCount > 0 && (
               <Button
                 variant="outline"
@@ -411,6 +413,11 @@ export function DiscoveredJobsList({
                         <div className="flex items-center gap-2">
                           <MapPin className="h-4 w-4 text-muted-foreground" />
                           {job.Location?.label || "N/A"}
+                          {job.workplaceType && (
+                            <Badge variant="outline" className="text-xs">
+                              {getWorkplaceTypeLabel(job.workplaceType, job.workplaceType)}
+                            </Badge>
+                          )}
                         </div>
                       </TableCell>
                       <TableCell className="text-center">

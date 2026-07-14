@@ -15,6 +15,7 @@ export interface JobForm {
   jobDescription: string;
   jobUrl?: string;
   applied: boolean;
+  workplaceType?: string | null;
 }
 
 export interface Tag {
@@ -35,9 +36,10 @@ export interface JobResponse {
   JobTitle: JobTitle;
   Company: Company;
   Status: JobStatus;
-  Location: JobLocation;
-  JobSource: JobSource;
+  Location: JobLocation | null;
+  JobSource: JobSource | null;
   jobType: string;
+  workplaceType?: string | null;
   createdAt: Date;
   appliedDate: Date;
   dueDate: Date;
@@ -64,6 +66,7 @@ export interface JobTitle {
   createdBy: string;
   _count?: {
     jobs: number;
+    jobsTotal?: number;
   };
 }
 
@@ -76,6 +79,7 @@ export interface Company {
   _count?: {
     jobsApplied: number;
     jobsRejected?: number;
+    jobsTotal?: number;
   };
 }
 
@@ -92,6 +96,7 @@ export interface JobSource {
   createdBy: string;
   _count?: {
     jobsApplied: number;
+    jobsTotal?: number;
   };
 }
 
@@ -104,6 +109,7 @@ export interface JobLocation {
   createdBy: string;
   _count?: {
     jobsApplied: number;
+    jobsTotal?: number;
   };
 }
 
@@ -117,6 +123,20 @@ export enum JOB_TYPES {
   FT = "Full-time",
   PT = "Part-time",
   C = "Contract",
+}
+
+export enum WORKPLACE_TYPES {
+  REMOTE = "Remote",
+  HYBRID = "Hybrid",
+  ONSITE = "Onsite",
+}
+
+export function getWorkplaceTypeLabel(
+  code?: string | null,
+  fallback: string = "Not specified",
+): string {
+  if (!code) return fallback;
+  return (WORKPLACE_TYPES as Record<string, string>)[code] ?? fallback;
 }
 
 export interface JobImportPrefill {
