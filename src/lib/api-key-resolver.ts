@@ -4,9 +4,11 @@ import db from "@/lib/db";
 import { decrypt } from "@/lib/encryption";
 import { PROVIDER_REGISTRY } from "@/lib/ai/provider-registry";
 
-// RapidAPI is not in the AI provider registry but still needs env var resolution
+// RapidAPI and Tavily are not in the AI provider registry (they are external
+// services, not LLM providers) but still need env var resolution.
 const EXTRA_ENV_VARS: Record<string, string> = {
   rapidapi: "RAPIDAPI_KEY",
+  tavily: "TAVILY_API_KEY",
 };
 
 export async function resolveApiKey(

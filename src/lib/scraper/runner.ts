@@ -31,11 +31,10 @@ import { APP_CONSTANTS } from "@/lib/constants";
 import {
   getModel,
   parseJobMatch,
-  AUTOMATION_JOB_MATCH_SYSTEM_PROMPT,
-  buildAutomationJobMatchPrompt,
   removeHtmlTags,
   type EmailAlertJob,
 } from "@/lib/ai";
+import { resolvePromptPair } from "@/lib/ai/prompts/resolve";
 import {
   AiProvider,
   OllamaModel,
@@ -1613,10 +1612,16 @@ ${removeHtmlTags(job.description)}
     const modelName = aiSettings.model || getDefaultModelForProvider(provider);
     const model = await getModel(provider, modelName, userId);
 
+    const { system, prompt } = await resolvePromptPair(
+      "automation-match",
+      userId,
+      { resumeText, jobDescription: jobText },
+    );
+
     const result = await generateText({
       model,
-      system: AUTOMATION_JOB_MATCH_SYSTEM_PROMPT,
-      prompt: buildAutomationJobMatchPrompt(resumeText, jobText),
+      system,
+      prompt,
       temperature: 0.3,
       abortSignal: signal,
     });

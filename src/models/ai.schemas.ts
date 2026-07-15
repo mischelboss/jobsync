@@ -202,3 +202,127 @@ export const EmailAlertSchema = z.object({
 
 export type EmailAlertResponse = z.infer<typeof EmailAlertSchema>;
 export type EmailAlertJob = z.infer<typeof EmailAlertJobSchema>;
+
+// INTERVIEW PREP SCHEMA
+// Questions grouped by reliability class so the UI can show provenance:
+//   Class 1 (technical, gaps, cvBreaks, behavioural, candidateQuestions) —
+//     always derivable from CV + job description alone.
+//   Class 2 (cultureValues, currentSituation) — only when company context is
+//     supplied; MUST be empty arrays when the context sentinel ("NONE") is sent.
+// Every question carries an answerScaffold, which also seeds the Question Bank
+// (createQuestion requires an answer of at least MIN_QUESTION_ANSWER_LENGTH).
+
+const InterviewQuestionSchema = z.object({
+  question: z
+    .string()
+    .describe("The interview question, phrased exactly as an interviewer would ask it."),
+  rationale: z
+    .string()
+    .nullable()
+    .describe(
+      "One sentence on why this question is likely, grounded in the CV or job description. Null if there is no specific reason.",
+    ),
+  answerScaffold: z
+    .string()
+    .describe(
+      "A concrete 2-4 sentence guide (at least ~40 characters) for how the candidate should answer, grounded ONLY in the CV and job description. Used verbatim as the saved answer when the candidate adds this to their Question Bank.",
+    ),
+});
+
+export const InterviewQuestionsSchema = z.object({
+  technical: z
+    .array(InterviewQuestionSchema)
+    .describe("Class 1. Technical/role questions derivable from the job description. Empty array if none."),
+  gaps: z
+    .array(InterviewQuestionSchema)
+    .describe("Class 1. Questions probing gaps between the CV and the job requirements. Empty array if none."),
+  cvBreaks: z
+    .array(InterviewQuestionSchema)
+    .describe(
+      "Class 1. Questions about employment gaps, breaks, layoffs or transitions visible in the CV. Empty array if none.",
+    ),
+  behavioural: z
+    .array(InterviewQuestionSchema)
+    .describe("Class 1. STAR-format behavioural questions grounded in the CV. Empty array if none."),
+  candidateQuestions: z
+    .array(InterviewQuestionSchema)
+    .describe(
+      "Class 1. Smart questions the CANDIDATE should ask the interviewer. The answerScaffold explains what a good answer to listen for sounds like. Empty array if none.",
+    ),
+  cultureValues: z
+    .array(InterviewQuestionSchema)
+    .describe(
+      "Class 2. Questions tied to the company's values, culture or mission. MUST be an EMPTY array when no company context is provided.",
+    ),
+  currentSituation: z
+    .array(InterviewQuestionSchema)
+    .describe(
+      "Class 2. Questions tied to the company's current situation (funding, product, news). MUST be an EMPTY array when no company context is provided.",
+    ),
+});
+
+export type InterviewQuestions = z.infer<typeof InterviewQuestionsSchema>;
+export type InterviewQuestion = z.infer<typeof InterviewQuestionSchema>;
+
+// COMPANY RESEARCH SCHEMA
+// Class-2 enrichment: extracted from fetched company/about pages, cached per
+// company and reused across jobs. Everything is null/empty when the pages do
+// not state it — never inferred, to avoid hallucinated culture.
+
+export const CompanyResearchSchema = z.object({
+  mission: z
+    .string()
+    .nullable()
+    .describe("The company's stated mission, taken from the provided pages only. Null if not found."),
+  values: z
+    .array(z.string())
+    .describe("Distinct company values or culture principles found in the provided text. Empty array if none found."),
+  culture: z
+    .string()
+    .nullable()
+    .describe("Short summary of the working culture explicitly described in the text. Null if not found."),
+  currentSituation: z
+    .string()
+    .nullable()
+    .describe(
+      "Notable recent situation (funding, launch, growth, restructuring, news) explicitly stated in the text. Null if not found.",
+    ),
+});
+
+export type CompanyResearch = z.infer<typeof CompanyResearchSchema>;
+
+// PROCESS RESEARCH SCHEMA
+// Class-3, best-effort and labelled: the interview rounds and their character,
+// each tagged with confidence + source so the UI never presents them as fact.
+
+const InterviewRoundSchema = z.object({
+  name: z
+    .string()
+    .describe("Short name of the round, e.g. 'Recruiter screen', 'Technical interview', 'Onsite'."),
+  character: z
+    .string()
+    .describe("What this round involves, grounded only in the provided sources."),
+  confidence: z
+    .enum(["verified", "estimated"])
+    .describe("'verified' only if a source explicitly states this round; otherwise 'estimated'."),
+  source: z
+    .string()
+    .nullable()
+    .describe("The source URL backing this round. Null if inferred without a specific page."),
+});
+
+export const ProcessResearchSchema = z.object({
+  roundsCount: z
+    .number()
+    .nullable()
+    .describe("Total number of interview rounds if stated or reliably inferable. Null if unknown."),
+  rounds: z
+    .array(InterviewRoundSchema)
+    .describe("The interview rounds in order. Empty array if the sources reveal nothing about the process."),
+  overallConfidence: z
+    .enum(["verified", "estimated"])
+    .describe("Overall confidence in this whole process description."),
+});
+
+export type ProcessResearch = z.infer<typeof ProcessResearchSchema>;
+export type InterviewRound = z.infer<typeof InterviewRoundSchema>;

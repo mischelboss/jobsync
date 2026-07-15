@@ -22,11 +22,10 @@ import { generateText } from "ai";
 import {
   getModel,
   parseJobMatch,
-  JOB_MATCH_SYSTEM_PROMPT,
-  buildJobMatchPrompt,
   preprocessResume,
   preprocessJob,
 } from "@/lib/ai";
+import { resolvePromptPair } from "@/lib/ai/prompts/resolve";
 import { getResumeById } from "@/actions/profile.actions";
 import { getJobDetails } from "@/actions/job.actions";
 import { defaultUserSettings } from "@/models/userSettings.model";
@@ -727,13 +726,15 @@ export async function analyzeDiscoveredJob(jobId: string): Promise<{
 
     const model = await getModel(ai.provider, ai.model || "llama3.2", user.id);
 
+    const { system, prompt } = await resolvePromptPair("job-match", user.id, {
+      resumeText: resumePre.data.normalizedText,
+      jobDescription: jobPre.data.normalizedText,
+    });
+
     const result = await generateText({
       model,
-      system: JOB_MATCH_SYSTEM_PROMPT,
-      prompt: buildJobMatchPrompt(
-        resumePre.data.normalizedText,
-        jobPre.data.normalizedText,
-      ),
+      system,
+      prompt,
       temperature: 0.3,
     });
 

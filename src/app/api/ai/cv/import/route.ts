@@ -6,12 +6,8 @@ import { generateObject } from "ai";
 import { getModel } from "@/lib/ai/providers";
 import { checkRateLimit } from "@/lib/ai/rate-limiter";
 import { extractTextFromPdf } from "@/lib/ai/tools/pdf-extraction";
-import {
-  CvImportSchema,
-  CV_IMPORT_SYSTEM_PROMPT,
-  buildCvImportPrompt,
-  AIUnavailableError,
-} from "@/lib/ai";
+import { CvImportSchema, AIUnavailableError } from "@/lib/ai";
+import { resolvePromptPair } from "@/lib/ai/prompts/resolve";
 import { AiModel } from "@/models/ai.model";
 
 /**
@@ -78,11 +74,15 @@ export const POST = async (req: NextRequest) => {
       userId,
     );
 
+    const { system, prompt } = await resolvePromptPair("cv-import", userId, {
+      cvText: extraction.text,
+    });
+
     const { object } = await generateObject({
       model,
       schema: CvImportSchema,
-      system: CV_IMPORT_SYSTEM_PROMPT,
-      prompt: buildCvImportPrompt(extraction.text),
+      system,
+      prompt,
       temperature: 0.2,
     });
 
