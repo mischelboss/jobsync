@@ -28,13 +28,21 @@ function isWalledHost(url: URL): boolean {
   return WALLED_HOSTS.some((h) => host === h || host.endsWith(`.${h}`));
 }
 
-// Best-effort full-text fetch for a single job link. Returns cleaned text on
-// success, or null on any wall/captcha/error/timeout so the caller falls back to
-// the email snippet. NEVER throws.
-//
-// TODO(ba): arbeitsagentur.de links could load the full posting via the BA API
-// (see src/lib/scraper/ba) instead of scraping HTML — a future enhancement.
-export async function followJobLink(rawUrl: string): Promise<string | null> {
+export interface FetchPageTextOptions {
+  /** Attempt hosts on WALLED_HOSTS instead of skipping them (still degrades via
+   *  WALL_MARKERS if the response turns out to be a wall). Research wants this. */
+  allowWalled?: boolean;
+  timeoutMs?: number;
+}
+
+// Best-effort full-text fetch for a single URL. Returns cleaned text on success,
+// or null on any wall/captcha/error/timeout. NEVER throws. Shared by email link
+// following (allowWalled: false — a walled host is a wasted request) and by
+// company/process research (allowWalled: true — attempt and degrade gracefully).
+export async function fetchPageText(
+  rawUrl: string,
+  opts: FetchPageTextOptions = {},
+): Promise<string | null> {
   let url: URL;
   try {
     url = new URL(rawUrl);
@@ -42,10 +50,13 @@ export async function followJobLink(rawUrl: string): Promise<string | null> {
     return null;
   }
   if (url.protocol !== "http:" && url.protocol !== "https:") return null;
-  if (isWalledHost(url)) return null;
+  if (!opts.allowWalled && isWalledHost(url)) return null;
 
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  const timeout = setTimeout(
+    () => controller.abort(),
+    opts.timeoutMs ?? FETCH_TIMEOUT_MS,
+  );
   try {
     const res = await fetch(url.toString(), {
       signal: controller.signal,
@@ -75,4 +86,14 @@ export async function followJobLink(rawUrl: string): Promise<string | null> {
   } finally {
     clearTimeout(timeout);
   }
+}
+
+// Best-effort full-text fetch for a single job link. Returns cleaned text on
+// success, or null on any wall/captcha/error/timeout so the caller falls back to
+// the email snippet. NEVER throws.
+//
+// TODO(ba): arbeitsagentur.de links could load the full posting via the BA API
+// (see src/lib/scraper/ba) instead of scraping HTML — a future enhancement.
+export function followJobLink(rawUrl: string): Promise<string | null> {
+  return fetchPageText(rawUrl, { allowWalled: false });
 }
