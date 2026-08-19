@@ -31,6 +31,8 @@ import { COMPANY_RESEARCH_SYSTEM_PROMPT } from "./company-research/system";
 import { COMPANY_RESEARCH_USER_TEMPLATE } from "./company-research/user";
 import { INTERVIEW_PROCESS_SYSTEM_PROMPT } from "./interview-process/system";
 import { INTERVIEW_PROCESS_USER_TEMPLATE } from "./interview-process/user";
+import { COVER_LETTER_SYSTEM_PROMPT } from "./cover-letter/system";
+import { COVER_LETTER_USER_TEMPLATE } from "./cover-letter/user";
 
 export type PromptType = "system" | "template";
 
@@ -44,7 +46,8 @@ export type PromptFeature =
   | "email-alert"
   | "interview-prep"
   | "company-research"
-  | "interview-process";
+  | "interview-process"
+  | "cover-letter";
 
 export interface PromptEntry {
   /** Stable identifier persisted in PromptOverride.promptId. Never rename. */
@@ -199,6 +202,19 @@ const FEATURE_SPECS: FeatureSpec[] = [
     systemDescription:
       "Defines the rounds extraction and the confidence/source labelling rules.",
     userDescription: "Wraps the company name and the fetched source text.",
+  },
+  {
+    feature: "cover-letter",
+    label: "Cover Letter",
+    description:
+      "Writes a cover letter from a resume and a job description, reusing the saved match analysis when the job has one.",
+    structuredOutput: false,
+    systemText: COVER_LETTER_SYSTEM_PROMPT,
+    userTemplate: COVER_LETTER_USER_TEMPLATE,
+    systemDescription:
+      "Defines the letter's voice, length and structure, and what it may not invent.",
+    userDescription:
+      'Wraps the resume, the job description and the prior match analysis. matchGuidance is the sentinel "NONE" when the job has no saved match.',
   },
 ];
 
