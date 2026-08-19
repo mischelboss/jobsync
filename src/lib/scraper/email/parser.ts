@@ -1,4 +1,5 @@
 import { generateObject } from "ai";
+import { repairJsonText } from "@/lib/ai/repair-json";
 import { getModel, EmailAlertSchema, type EmailAlertJob } from "@/lib/ai";
 import { resolvePromptPair } from "@/lib/ai/prompts/resolve";
 import type { AiProvider } from "@/models/ai.model";
@@ -42,6 +43,15 @@ export async function extractJobsFromEmail(
       prompt,
       temperature: 0.2,
       abortSignal: signal,
+      // Some OpenRouter models ignore the JSON response format and answer with
+      // a ```json fence; this runs only after the SDK's own parse fails.
+      experimental_repairText: repairJsonText,
+      providerOptions: {
+        // OpenAI and OpenRouter share a factory and default to strict
+        // json_schema, which rejects schemas whose `required` omits an
+        // optional key. Non-strict passes the schema as guidance instead.
+        openai: { strictJsonSchema: false },
+      },
     });
 
     // Keep only listings with a usable title — the LLM occasionally emits a
