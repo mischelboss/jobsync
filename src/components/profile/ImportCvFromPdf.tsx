@@ -257,13 +257,13 @@ function ImportCvFromPdf({ resume }: ImportCvFromPdfProps) {
             <>
               {ollamaConnected === true && (
                 <div className="flex items-center gap-1 text-green-600 text-sm">
-                  <CheckCircle className="h-4 w-4 flex-shrink-0" />
+                  <CheckCircle className="h-4 w-4 shrink-0" />
                   <span>Ollama is connected</span>
                 </div>
               )}
               {ollamaConnected === false && (
                 <div className="flex items-center gap-1 text-red-600 text-sm">
-                  <XCircle className="h-4 w-4 flex-shrink-0" />
+                  <XCircle className="h-4 w-4 shrink-0" />
                   <span>{connectionError}</span>
                 </div>
               )}
