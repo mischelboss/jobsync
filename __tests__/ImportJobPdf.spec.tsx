@@ -3,14 +3,15 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ImportJobPdf } from "@/components/myjobs/ImportJobPdf";
 import { getUserSettings } from "@/actions/userSettings.actions";
-import { toast } from "@/components/ui/use-toast";
+import { toastSuccess, toastError } from "@/lib/toast";
 
 vi.mock("@/actions/userSettings.actions", () => ({
   getUserSettings: vi.fn(),
 }));
 
-vi.mock("@/components/ui/use-toast", () => ({
-  toast: vi.fn(),
+vi.mock("@/lib/toast", () => ({
+  toastSuccess: vi.fn(),
+  toastError: vi.fn(),
 }));
 
 const importData = {
@@ -68,8 +69,8 @@ describe("ImportJobPdf", () => {
       provider: "ollama",
       model: "llama3.2",
     });
-    expect(toast).toHaveBeenCalledWith(
-      expect.objectContaining({ variant: "success" }),
+    expect(toastSuccess).toHaveBeenCalledWith(
+      "Job details imported. Review and save.",
     );
   });
 
@@ -84,12 +85,7 @@ describe("ImportJobPdf", () => {
     await selectPdf();
 
     await waitFor(() => {
-      expect(toast).toHaveBeenCalledWith(
-        expect.objectContaining({
-          variant: "destructive",
-          description: "Only PDF files are supported",
-        }),
-      );
+      expect(toastError).toHaveBeenCalledWith("Only PDF files are supported");
     });
     expect(onImported).not.toHaveBeenCalled();
   });
