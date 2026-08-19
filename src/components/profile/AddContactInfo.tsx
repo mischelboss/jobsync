@@ -1,13 +1,14 @@
 "use client";
-import { Loader, X } from "lucide-react";
+import { X } from "lucide-react";
 import { Button } from "../ui/button";
 import {
   Dialog,
   DialogContent,
-  DialogFooter,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "../ui/dialog";
+import { FormDialogFooter } from "../FormDialogFooter";
 import {
   Form,
   FormControl,
@@ -22,7 +23,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { useEffect, useState, useTransition } from "react";
-import { toast } from "../ui/use-toast";
+import { toastActionResult } from "@/lib/toast";
 import { ContactInfo } from "@/models/profile.model";
 import { addContactInfo, updateContactInfo } from "@/actions/profile.actions";
 
@@ -56,6 +57,9 @@ function AddContactInfo({
   const pageTitle = contactInfoToEdit
     ? "Edit Contact Info"
     : "Add Contact Info";
+  const pageDescription = contactInfoToEdit
+    ? "Update your contact information on your resume."
+    : "Add your contact information to your resume.";
 
   const form = useForm<z.infer<typeof AddContactInfoFormSchema>>({
     resolver: zodResolver(AddContactInfoFormSchema),
@@ -119,22 +123,15 @@ function AddContactInfo({
       const res = contactInfoToEdit
         ? await updateContactInfo(data)
         : await addContactInfo(data);
-      if (!res.success) {
-        toast({
-          variant: "destructive",
-          title: "Error!",
-          description: res.message,
-        });
-      } else {
-        reset();
-        setDialogOpen(false);
-        toast({
-          variant: "success",
-          description: `Contact Info has been ${
-            contactInfoToEdit ? "updated" : "created"
-          } successfully`,
-        });
-      }
+      toastActionResult(res, {
+        success: `Contact Info has been ${
+          contactInfoToEdit ? "updated" : "created"
+        } successfully`,
+        onSuccess: () => {
+          reset();
+          setDialogOpen(false);
+        },
+      });
     });
   };
 
@@ -145,6 +142,7 @@ function AddContactInfo({
       <DialogContent className="lg:max-h-screen overflow-y-scroll">
         <DialogHeader>
           <DialogTitle>{pageTitle}</DialogTitle>
+          <DialogDescription>{pageDescription}</DialogDescription>
         </DialogHeader>
         <Form {...form}>
           <form
@@ -152,7 +150,7 @@ function AddContactInfo({
             className="grid grid-cols-1 md:grid-cols-2 gap-4 p-2"
           >
             {/* FIRST NAME */}
-            <div className="md:col-span-2">
+            <div>
               <FormField
                 control={form.control}
                 name="firstName"
@@ -169,7 +167,7 @@ function AddContactInfo({
             </div>
 
             {/* LAST NAME */}
-            <div className="md:col-span-2">
+            <div>
               <FormField
                 control={form.control}
                 name="lastName"
@@ -203,7 +201,7 @@ function AddContactInfo({
             </div>
 
             {/* EMAIL */}
-            <div className="md:col-span-2">
+            <div>
               <FormField
                 control={form.control}
                 name="email"
@@ -220,7 +218,7 @@ function AddContactInfo({
             </div>
 
             {/* PHONE */}
-            <div className="md:col-span-2">
+            <div>
               <FormField
                 control={form.control}
                 name="phone"
@@ -353,24 +351,11 @@ function AddContactInfo({
               </div>
             )}
 
-            <div className="md:col-span-2 mt-4">
-              <DialogFooter>
-                <div>
-                  <Button
-                    type="reset"
-                    variant="outline"
-                    className="mt-2 md:mt-0 w-full"
-                    onClick={closeDialog}
-                  >
-                    Cancel
-                  </Button>
-                </div>
-                <Button type="submit" disabled={!formState.isDirty}>
-                  Save
-                  {isPending && <Loader className="h-4 w-4 shrink-0 spinner" />}
-                </Button>
-              </DialogFooter>
-            </div>
+            <FormDialogFooter
+              onCancel={closeDialog}
+              isPending={isPending}
+              saveDisabled={!formState.isDirty}
+            />
           </form>
         </Form>
       </DialogContent>

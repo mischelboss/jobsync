@@ -22,6 +22,7 @@ import {
   jobDedupeKey,
   contentFingerprint,
 } from "./utils";
+import { getExistingJobDedupeMap } from "@/lib/jobs/jobDedupe";
 import { fetchAlertEmails, type ImapConnectionParams } from "./email";
 import { extractJobsFromEmail } from "./email/parser";
 import { followJobLink } from "./email/follow";
@@ -448,7 +449,7 @@ export async function runAutomation(
       "Checking for duplicate jobs...",
     );
 
-    const existingKeys = await getExistingJobKeys(automation.userId);
+    const existingKeys = await getExistingJobDedupeMap(automation.userId);
     const newJobs = dedupeJobs(searchResult.data, existingKeys);
     const jobsDeduplicated = newJobs.length;
 
@@ -1111,7 +1112,6 @@ async function runEmailRun(
     });
   }
 }
-
 interface AtsRunConfig {
   companies: { name: string; token: string; host?: "default" | "eu" }[];
   targetTitles: string[];
@@ -1266,7 +1266,7 @@ async function runAtsRun(
     );
 
     // Dedup against existing jobs and within this batch.
-    const existingKeys = await getExistingJobKeys(automation.userId);
+    const existingKeys = await getExistingJobDedupeMap(automation.userId);
     const dedupedJobs = dedupeJobs(jobs, existingKeys);
     const jobsDeduplicated = dedupedJobs.length;
 
@@ -1681,7 +1681,7 @@ async function convertResumeForMatch(
 
   for (const section of resume.ResumeSections) {
     if (section.sectionType === "summary" && section.summary?.content) {
-      parts.push("## SUMMARY", section.summary.content);
+      parts.push("## SUMMARY", removeHtmlTags(section.summary.content));
     }
 
     if (
@@ -1694,7 +1694,7 @@ async function convertResumeForMatch(
           `Company: ${exp.Company.label}`,
           `Job Title: ${exp.jobTitle.label}`,
           `Location: ${exp.location.label}`,
-          `Description: ${exp.description}`,
+          `Description: ${removeHtmlTags(exp.description)}`,
           "",
         );
       }
@@ -1707,7 +1707,7 @@ async function convertResumeForMatch(
           `Institution: ${edu.institution}`,
           `Degree: ${edu.degree}`,
           `Field: ${edu.fieldOfStudy}`,
-          edu.description ? `Description: ${edu.description}` : "",
+          edu.description ? `Description: ${removeHtmlTags(edu.description)}` : "",
           "",
         );
       }

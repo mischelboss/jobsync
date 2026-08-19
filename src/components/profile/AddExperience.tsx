@@ -8,12 +8,11 @@ import { z } from "zod";
 import {
   Dialog,
   DialogContent,
-  DialogFooter,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "../ui/dialog";
-import { Button } from "../ui/button";
-import { Loader } from "lucide-react";
+import { FormDialogFooter } from "../FormDialogFooter";
 import {
   Form,
   FormControl,
@@ -24,7 +23,7 @@ import {
 } from "../ui/form";
 import { Input } from "../ui/input";
 import TiptapEditor from "../TiptapEditor";
-import { toast } from "../ui/use-toast";
+import { toastSuccess, toastError } from "@/lib/toast";
 import { Combobox } from "../ComboBox";
 import { DatePicker } from "../DatePicker";
 import { Company, JobLocation, JobTitle } from "@/models/job.model";
@@ -53,6 +52,9 @@ function AddExperience({
   const [locations, setLocations] = useState<JobLocation[]>([]);
   const [jobTitles, setJobTitles] = useState<JobTitle[]>([]);
   const pageTitle = experienceToEdit ? "Edit Experience" : "Add Experience";
+  const pageDescription = experienceToEdit
+    ? "Update this work experience on your resume."
+    : "Add a work experience to your resume.";
   const [isPending, startTransition] = useTransition();
   const getTitleCompanyAndLocationData = useCallback(async () => {
     const [_companies, _titles, _locations] = await Promise.all([
@@ -119,20 +121,13 @@ function AddExperience({
         ? await updateExperience(data)
         : await addExperience(data);
       if (!res.success) {
-        toast({
-          variant: "destructive",
-          title: "Error!",
-          description: res.message,
-        });
+        toastError(res.message);
       } else {
         reset();
         setDialogOpen(false);
-        toast({
-          variant: "success",
-          description: `Experience has been ${
-            experienceToEdit ? "updated" : "added"
-          } successfully`,
-        });
+        toastSuccess(`Experience has been ${
+          experienceToEdit ? "updated" : "added"
+        } successfully`);
       }
     });
   };
@@ -150,6 +145,7 @@ function AddExperience({
       <DialogContent className="h-full md:h-[85%] lg:max-h-screen md:max-w-[40rem] overflow-y-scroll">
         <DialogHeader>
           <DialogTitle>{pageTitle}</DialogTitle>
+          <DialogDescription>{pageDescription}</DialogDescription>
         </DialogHeader>
         <Form {...form}>
           <form
@@ -256,7 +252,7 @@ function AddExperience({
                 render={({ field }) => (
                   <FormItem className="flex flex-row">
                     <Switch
-                      checked={field.value}
+                      checked={field.value ?? false}
                       onCheckedChange={(c) => {
                         field.onChange(c);
                         onCurrentJob(c);
@@ -308,24 +304,11 @@ function AddExperience({
                 )}
               />
             </div>
-            <div className="md:col-span-2 mt-4">
-              <DialogFooter>
-                <div>
-                  <Button
-                    type="reset"
-                    variant="outline"
-                    className="mt-2 md:mt-0 w-full"
-                    onClick={closeDialog}
-                  >
-                    Cancel
-                  </Button>
-                </div>
-                <Button type="submit" disabled={!formState.isDirty}>
-                  Save
-                  {isPending && <Loader className="h-4 w-4 shrink-0 spinner" />}
-                </Button>
-              </DialogFooter>
-            </div>
+            <FormDialogFooter
+              onCancel={closeDialog}
+              isPending={isPending}
+              saveDisabled={!formState.isDirty}
+            />
           </form>
         </Form>
       </DialogContent>

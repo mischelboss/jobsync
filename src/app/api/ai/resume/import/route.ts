@@ -129,6 +129,10 @@ export const POST = async (req: NextRequest) => {
     // background until it finishes or hits the timeout.
     req.signal.addEventListener("abort", () => controller.abort());
 
+    // Only onError carries the provider's message — the error thrown from
+    // partialOutputStream is a generic "No output generated".
+    let streamErrorMessage: string | undefined;
+
     const result = streamText({
       model,
       output: Output.object({ schema: ResumeImportSchema }),
@@ -138,6 +142,10 @@ export const POST = async (req: NextRequest) => {
       abortSignal: controller.signal,
       providerOptions: {
         ollama: { options: { num_ctx: APP_CONSTANTS.AI_OLLAMA_NUM_CTX } },
+        // OpenAI (and OpenRouter, same factory) default to strict json_schema,
+        // which rejects any object whose `required` omits a key — this schema
+        // is optional-by-design throughout. Non-strict passes it as guidance.
+        openai: { strictJsonSchema: false },
       },
       onFinish: () => {
         clearTimeout(timer);
@@ -145,6 +153,7 @@ export const POST = async (req: NextRequest) => {
       onError: ({ error }) => {
         clearTimeout(timer);
         console.error("Resume import stream error:", error);
+        streamErrorMessage = error instanceof Error ? error.message : undefined;
       },
     });
 
@@ -165,6 +174,15 @@ export const POST = async (req: NextRequest) => {
           // last complete snapshot. onError already logged it.
           console.error("Resume import stream interrupted:", err);
         } finally {
+          // The 200 and headers are committed before the provider is called,
+          // so a failure can only reach the client in-band as a final line.
+          if (streamErrorMessage) {
+            controller.enqueue(
+              encoder.encode(
+                JSON.stringify({ __error: streamErrorMessage }) + "\n",
+              ),
+            );
+          }
           controller.close();
         }
       },

@@ -56,8 +56,11 @@ export interface JobResponse {
   tags?: Tag[];
   createdVia?: string | null;
   discoveryStatus?: string | null;
+  descriptionCompleteness?: DescriptionCompleteness | null;
   _count?: { Notes?: number };
 }
+
+export type JobsViewMode = "table" | "cards";
 
 export interface JobTitle {
   id: string;
@@ -131,6 +134,24 @@ export enum WORKPLACE_TYPES {
   ONSITE = "Onsite",
 }
 
+// Matches free-text input against a fixed enum, ignoring case and separators,
+// and returns its [key, label] pair. These are closed sets, so — unlike
+// canonicalizeEntityValue, which keeps punctuation on purpose so "C++" and
+// "C#" cannot collapse — folding separators here is safe. Postings write
+// "On-site" far more often than "Onsite", and rejecting the variant used to
+// fail the whole save. Lives here rather than in resolve.ts because
+// mcp.schema.ts needs it too and cannot import Prisma.
+export function matchEnumEntry(
+  members: Record<string, string>,
+  input: string,
+): [string, string] | undefined {
+  const fold = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const folded = fold(input);
+  return (Object.entries(members) as [string, string][]).find(
+    ([key, label]) => fold(key) === folded || fold(label) === folded,
+  );
+}
+
 export function getWorkplaceTypeLabel(
   code?: string | null,
   fallback: string = "Not specified",
@@ -155,3 +176,5 @@ export interface JobImportData {
   company?: Company | null;
   location?: JobLocation | null;
 }
+
+export type DescriptionCompleteness = "title-only" | "partial" | "full";

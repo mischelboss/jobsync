@@ -18,6 +18,9 @@ export interface Activity {
   startTime: Date;
   endTime?: Date;
   duration?: number;
+  breakMinutes?: number;
+  breakStartedAt?: Date | null;
+  breakPlannedMins?: number | null;
   description?: string;
   taskId?: string | null;
 }

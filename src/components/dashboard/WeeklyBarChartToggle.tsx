@@ -4,6 +4,8 @@ import { useState, useEffect } from "react";
 import { ResponsiveBar } from "@nivo/bar";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import { cn } from "@/lib/utils";
+import { APP_CONSTANTS } from "@/lib/constants";
+import { usePersistedTabIndex } from "@/hooks/usePersistedTabIndex";
 
 type ChartConfig = {
   label: string;
@@ -21,7 +23,10 @@ type WeeklyBarChartToggleProps = {
 export default function WeeklyBarChartToggle({
   charts,
 }: WeeklyBarChartToggleProps) {
-  const [activeIndex, setActiveIndex] = useState(0);
+  const [activeIndex, selectTab] = usePersistedTabIndex(
+    APP_CONSTANTS.DASHBOARD_WEEKLY_CHART_STORAGE_KEY,
+    charts.map((chart) => chart.label),
+  );
   const [isSmallScreen, setIsSmallScreen] = useState(false);
   const current = charts[activeIndex];
 
@@ -73,27 +78,27 @@ export default function WeeklyBarChartToggle({
       : null;
 
   return (
-    <Card className="mb-2 lg:mb-0">
+    <Card className="mb-2 @3xl/main:mb-0">
       <CardHeader className="pb-3">
-        <div className="flex items-center justify-between mb-1 mt-3">
-          <div className="flex items-baseline gap-2">
-            <CardTitle className="text-green-600">
+        <div className="flex items-center justify-between gap-2 mb-1 mt-3">
+          <div className="flex items-baseline gap-2 min-w-0">
+            <CardTitle className="text-lg text-green-600 truncate">
               Weekly {current.label}
             </CardTitle>
             {totalHours !== null && (
-              <span className="text-sm text-muted-foreground">
+              <span className="text-sm text-muted-foreground whitespace-nowrap">
                 {totalHours.toFixed(1)} hrs
               </span>
             )}
           </div>
           <div
-            className="flex rounded-md border text-xs"
+            className="flex shrink-0 rounded-md border text-xs"
             data-testid="weekly-chart-toggle-group"
           >
             {charts.map((chart, index) => (
               <button
                 key={chart.label}
-                onClick={() => setActiveIndex(index)}
+                onClick={() => selectTab(index)}
                 className={cn(
                   "px-2 py-1 transition-colors",
                   index === 0 && "rounded-l-md",
@@ -149,6 +154,7 @@ export default function WeeklyBarChartToggle({
             enableGridX={false}
             enableGridY={false}
             enableLabel={true}
+            labelSkipHeight={1}
             labelTextColor={{
               from: "color",
               modifiers: [["darker", 1.6]],

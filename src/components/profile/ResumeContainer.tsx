@@ -1,6 +1,6 @@
 "use client";
 import { Resume, ResumeSection, SectionType } from "@/models/profile.model";
-import { Card, CardDescription, CardHeader, CardTitle } from "../ui/card";
+import { Card, CardHeader, CardTitle } from "../ui/card";
 import { ResponsiveCardHeader } from "../ResponsiveCardHeader";
 import AddResumeSection, { AddResumeSectionRef } from "./AddResumeSection";
 import ContactInfoCard from "./ContactInfoCard";
@@ -13,26 +13,24 @@ import {
   useTransition,
 } from "react";
 import { useRouter } from "next/navigation";
-import { toast } from "../ui/use-toast";
+import { toastSuccess, toastError } from "@/lib/toast";
 import SummarySectionCard from "./SummarySectionCard";
 import ExperienceCard from "./ExperienceCard";
 import EducationCard from "./EducationCard";
 import CertificationCard from "./CertificationCard";
 import SkillsSectionCard from "./SkillsSectionCard";
-import AiResumeReviewSection from "./AiResumeReviewSection";
 import ImportCvFromPdf from "./ImportCvFromPdf";
 import { ReviewDetails } from "./ReviewDetails";
+import { useAgentChat } from "@/components/agent/AgentChatProvider";
 import { DownloadFileButton } from "./DownloadFileButton";
 import type { ResumeReviewData } from "@/models/ai.schemas";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "../ui/dropdown-menu";
+import { ExportPdfDialog } from "./ExportPdfDialog";
 import type { ResumeLayout } from "./resume-pdf";
 import {
   AlertDialog,
@@ -362,20 +360,21 @@ function ResumeContainer({
   const goBack = () => router.back();
   const isDefault = !!resume?.id && resume.id === defaultResumeId;
   const [setDefaultConfirmOpen, setSetDefaultConfirmOpen] = useState(false);
-  const [currentReviewData, setCurrentReviewData] = useState(
-    resume.reviewData,
-  );
+  const {
+    open: openChat,
+    sendMessage,
+    clear: clearChat,
+    approvalPending,
+  } = useAgentChat();
+  const [showClearChatConfirm, setShowClearChatConfirm] = useState(false);
   const parsedReviewData = useMemo(() => {
-    if (!currentReviewData) return null;
+    if (!resume.reviewData) return null;
     try {
-      return JSON.parse(currentReviewData) as ResumeReviewData;
+      return JSON.parse(resume.reviewData) as ResumeReviewData;
     } catch {
       return null;
     }
-  }, [currentReviewData]);
-  const handleReviewSaved = useCallback((reviewData: string) => {
-    setCurrentReviewData(reviewData);
-  }, []);
+  }, [resume.reviewData]);
   const resumeSectionRef = useRef<AddResumeSectionRef>(null);
   const [isExporting, setIsExporting] = useState(false);
   const [pendingPdf, setPendingPdf] = useState<{
@@ -383,6 +382,7 @@ function ResumeContainer({
     filename: string;
   } | null>(null);
   const [showAttachConfirm, setShowAttachConfirm] = useState(false);
+  const [showExportDialog, setShowExportDialog] = useState(false);
   const [showDiscardImportConfirm, setShowDiscardImportConfirm] =
     useState(false);
 
@@ -439,11 +439,10 @@ function ResumeContainer({
         const cards = buildPendingCards(data);
         if (cards.length === 0) {
           setImportMode(false);
-          toast({
-            title: "No sections found",
-            description:
-              "No structured data could be extracted from the document.",
-          });
+          toastError(
+            "No structured data could be extracted from the document.",
+            "No sections found",
+          );
           return;
         }
         setPendingCards(cards);
@@ -455,14 +454,9 @@ function ResumeContainer({
         // Client-initiated abort (unmount/navigation) — not a user-facing error.
         if (abortController.signal.aborted) return;
         setImportMode(false);
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description:
-            error instanceof Error
-              ? error.message
-              : "Failed to contact AI service.",
-        });
+        toastError(
+          error instanceof Error ? error.message : "Failed to contact AI service.",
+        );
       } finally {
         if (importAbortRef.current === abortController) {
           importAbortRef.current = null;
@@ -556,11 +550,7 @@ function ResumeContainer({
         setPendingCards((prev) => prev.filter((c) => c.id !== cardId));
         router.refresh();
       } else {
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: result.message,
-        });
+        toastError(result.message);
       }
     },
     [pendingCards, resume.id, router],
@@ -577,11 +567,7 @@ function ResumeContainer({
     if (result?.success) {
       router.push("/dashboard/profile");
     } else {
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: result?.message,
-      });
+      toastError(result?.message);
     }
   };
 
@@ -632,12 +618,10 @@ function ResumeContainer({
         s.skills?.length,
     );
     if (!hasName && !hasSections) {
-      toast({
-        title: "Nothing to export",
-        description:
-          "Add your contact info and at least one section (Summary, Experience, or Education) before exporting.",
-        variant: "destructive",
-      });
+      toastError(
+        "Add your contact info and at least one section (Summary, Experience, or Education) before exporting.",
+        "Nothing to export",
+      );
       return;
     }
 
@@ -649,19 +633,13 @@ function ResumeContainer({
       if (!resume.FileId) {
         triggerDownload(blob, filename);
         await uploadPdfAsAttachment(blob, filename, false);
-        toast({
-          title: "PDF exported",
-          description: "Saved to Downloads and attached to this resume.",
-        });
+        toastSuccess("Saved to Downloads and attached to this resume.", "PDF exported");
       } else {
         setPendingPdf({ blob, filename });
         setShowAttachConfirm(true);
       }
     } catch {
-      toast({
-        title: "Failed to generate PDF. Please try again.",
-        variant: "destructive",
-      });
+      toastError("Failed to generate PDF. Please try again.");
     } finally {
       setIsExporting(false);
     }
@@ -676,21 +654,12 @@ function ResumeContainer({
       triggerDownload(blob, filename);
       if (choice === "replace") {
         await uploadPdfAsAttachment(blob, filename, true);
-        toast({
-          title: "PDF exported",
-          description: "Saved to Downloads and attachment replaced.",
-        });
+        toastSuccess("Saved to Downloads and attachment replaced.", "PDF exported");
       } else {
-        toast({
-          title: "PDF exported",
-          description: "Saved to your Downloads folder.",
-        });
+        toastSuccess("Saved to your Downloads folder.", "PDF exported");
       }
     } catch {
-      toast({
-        title: "Failed to upload PDF. Please try again.",
-        variant: "destructive",
-      });
+      toastError("Failed to upload PDF. Please try again.");
     } finally {
       setIsExporting(false);
       setPendingPdf(null);
@@ -713,6 +682,27 @@ function ResumeContainer({
   const skillsSection = ResumeSections?.find(
     (s) => s.sectionType === SectionType.SKILLS,
   );
+
+  // Panel first so a failed clear can never leave the button looking dead,
+  // and the review is sent either way — a conversation that would not clear
+  // is no reason to withhold it.
+  const startReview = async () => {
+    openChat();
+    try {
+      await clearChat();
+    } catch {
+      // Reported by the action itself; the review still goes out.
+    }
+    void sendMessage({ parts: [{ type: "text", text: `Review ${title}` }] });
+  };
+
+  const onReviewClick = () => {
+    if (approvalPending) {
+      setShowClearChatConfirm(true);
+      return;
+    }
+    void startReview();
+  };
 
   const openContactInfoDialog = () =>
     resumeSectionRef.current?.openContactInfoDialog(ContactInfo!);
@@ -743,11 +733,7 @@ function ResumeContainer({
     if (!skillsSection?.id) return;
     const result = await deleteSkillsSection(skillsSection.id);
     if (!result.success) {
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: result.message,
-      });
+      toastError(result.message);
     } else {
       router.refresh();
     }
@@ -773,38 +759,21 @@ function ResumeContainer({
     if (!resume?.id) return;
     const { success, message } = await setDefaultResume(resume.id);
     if (success) {
-      toast({
-        variant: "success",
-        description: "This resume is now your default.",
-      });
+      toastSuccess("This resume is now your default.");
       router.refresh();
     } else {
-      toast({
-        variant: "destructive",
-        title: "Error!",
-        description: message,
-      });
+      toastError(message);
     }
   };
 
   return (
     <>
-      <div className="flex justify-between">
-        <Button title="Go Back" size="sm" variant="outline" onClick={goBack}>
-          <ArrowLeft />
-        </Button>
-      </div>
-      <Card>
-        <CardHeader className="flex-col gap-2 sm:flex-row sm:justify-between sm:items-center lg:grid lg:grid-cols-3 lg:items-center">
-          <div className="flex items-center gap-2">
-            <CardTitle>Resume</CardTitle>
-            {isDefault && (
-              <Badge className="border-transparent bg-green-600 text-white hover:bg-green-600/90">
-                Default
-              </Badge>
-            )}
-          </div>
-          <CardDescription className="mt-0 lg:flex lg:justify-center">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-2">
+          <Button title="Go Back" size="sm" variant="outline" onClick={goBack}>
+            <ArrowLeft />
+          </Button>
+          <CardTitle>
             {resume.FileId && resume.File?.filePath
               ? DownloadFileButton(
                   resume.File?.filePath,
@@ -812,68 +781,62 @@ function ResumeContainer({
                   resume.File?.fileName,
                 )
               : title}
-          </CardDescription>
-          <div className="flex items-center gap-2 flex-wrap lg:justify-end">
-            <AddResumeSection resume={resume} ref={resumeSectionRef} />
-            <ImportCvFromPdf resume={resume} />
-            <AiResumeReviewSection
-              resume={resume}
-              onReviewSaved={handleReviewSaved}
-            />
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button size="sm" variant="outline">
-                  <MoreVertical className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuSub>
-                  <DropdownMenuSubTrigger
-                    className="cursor-pointer"
-                    disabled={isExporting}
-                  >
-                    <FileDown className="h-4 w-4 mr-2" />
-                    {isExporting ? "Generating…" : "Export to PDF"}
-                  </DropdownMenuSubTrigger>
-                  <DropdownMenuSubContent>
-                    <DropdownMenuItem
-                      className="cursor-pointer"
-                      onClick={() => handleExportPdf("simple")}
-                      disabled={isExporting}
-                    >
-                      Simple
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      className="cursor-pointer"
-                      onClick={() => handleExportPdf("professional")}
-                      disabled={isExporting}
-                    >
-                      Professional
-                    </DropdownMenuItem>
-                  </DropdownMenuSubContent>
-                </DropdownMenuSub>
-                {!isDefault && (
-                  <DropdownMenuItem
-                    className="cursor-pointer"
-                    onClick={() => {
-                      if (!hasMinResumeSections(ResumeSections?.length)) {
-                        warnInsufficientResumeSections(
-                          "setting this resume as default",
-                        );
-                        return;
-                      }
-                      setSetDefaultConfirmOpen(true);
-                    }}
-                  >
-                    <Star className="h-4 w-4 mr-2" />
-                    Set as default
-                  </DropdownMenuItem>
-                )}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-        </CardHeader>
-      </Card>
+          </CardTitle>
+          {isDefault && (
+            <Badge className="border-transparent bg-green-600 text-white hover:bg-green-600/90">
+              Default
+            </Badge>
+          )}
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <AddResumeSection resume={resume} ref={resumeSectionRef} />
+          <ImportCvFromPdf resume={resume} />
+          <Button
+            className="h-8 gap-1 cursor-pointer"
+            onClick={onReviewClick}
+            size="sm"
+            variant="outline"
+          >
+            <Sparkles className="h-3.5 w-3.5" />
+            <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">
+              Review
+            </span>
+          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button size="sm" variant="outline">
+                <MoreVertical className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem
+                className="cursor-pointer"
+                onClick={() => setShowExportDialog(true)}
+              >
+                <FileDown className="h-4 w-4 mr-2" />
+                Export to PDF
+              </DropdownMenuItem>
+              {!isDefault && (
+                <DropdownMenuItem
+                  className="cursor-pointer"
+                  onClick={() => {
+                    if (!hasMinResumeSections(ResumeSections?.length)) {
+                      warnInsufficientResumeSections(
+                        "setting this resume as default",
+                      );
+                      return;
+                    }
+                    setSetDefaultConfirmOpen(true);
+                  }}
+                >
+                  <Star className="h-4 w-4 mr-2" />
+                  Set as default
+                </DropdownMenuItem>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </div>
 
       <DeleteAlertDialog
         pageTitle="resume"
@@ -1029,6 +992,14 @@ function ResumeContainer({
         />
       )}
 
+      {/* PDF EXPORT TEMPLATE PICKER */}
+      <ExportPdfDialog
+        open={showExportDialog}
+        onOpenChange={setShowExportDialog}
+        isExporting={isExporting}
+        onExport={handleExportPdf}
+      />
+
       {/* PDF ATTACHMENT CONFIRM */}
       <AlertDialog open={showAttachConfirm} onOpenChange={setShowAttachConfirm}>
         <AlertDialogContent>
@@ -1056,6 +1027,28 @@ function ResumeContainer({
             </Button>
             <AlertDialogAction onClick={() => handleAttachChoice("replace")}>
               Replace attachment
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* CLEAR CHAT BEFORE REVIEW CONFIRM */}
+      <AlertDialog
+        open={showClearChatConfirm}
+        onOpenChange={setShowClearChatConfirm}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Clear the assistant conversation?</AlertDialogTitle>
+            <AlertDialogDescription>
+              A job is waiting for your approval in the assistant. Starting a
+              review clears the conversation, and that job will not be saved.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => void startReview()}>
+              Clear and review
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -23,10 +23,27 @@ export const APP_CONSTANTS = {
   MIN_RESUME_SECTIONS_FOR_SELECTION: 2,
   ACTIVITY_MAX_DURATION_MINUTES: 8 * 60, // 8 Hours
   ACTIVITY_MAX_DURATION_MS: 8 * 60 * 60 * 1000, // 8 hours in milliseconds
-  RECENT_NUM_JOBS_ACTIVITIES: 7,
+  ACTIVITY_MIN_DURATION_MINUTES: 2, // activities shorter than this are discarded
+  ACTIVITY_BREAK_DEFAULT_MINUTES: 15,
+  ACTIVITY_BREAK_PRESETS: [5, 10, 15, 30],
+  ACTIVITY_BREAK_STEP_MINUTES: 5,
+  ACTIVITY_BREAK_MIN_MINUTES: 5,
+  ACTIVITY_BREAK_MAX_MINUTES: 60,
+  RECENT_NUM_JOBS_ACTIVITIES: 10,
   AI_SLOW_RESPONSE_THRESHOLD_MS: 15_000, // 15 seconds
   INTERSECTION_OBSERVER_THRESHOLD: 0.1,
-  TOAST_LIMIT: 1,
+  SIDEBAR_STORAGE_KEY: "sidebar-expanded",
+  DASHBOARD_WEEKLY_CHART_STORAGE_KEY: "dashboard-weekly-chart-tab",
+  DASHBOARD_RECENT_CARD_STORAGE_KEY: "dashboard-recent-card-tab",
+  LAST_JOB_LOCATION_STORAGE_KEY: "last-job-location",
+  LAST_JOB_SOURCE_STORAGE_KEY: "last-job-source",
+  JOBS_VIEW_MODE_STORAGE_KEY: "jobs-view-mode",
+  SIDEBAR_DOM_ID: "app-sidebar",
+  // Paired so the rail width and its matching content offset can't drift.
+  SIDEBAR_WIDTH: {
+    expanded: { rail: "w-56", contentOffset: "sm:pl-56" },
+    collapsed: { rail: "w-14", contentOffset: "sm:pl-14" },
+  },
 
   // Ollama API timeouts
   AI_OLLAMA_LIST_TIMEOUT_MS: 5_000,
@@ -52,6 +69,14 @@ export const APP_CONSTANTS = {
   // analysis (scores line plus several sections) over a resume and a JD, so a
   // local model can take minutes; too low cuts the stream mid-analysis.
   AI_JOB_MATCH_TIMEOUT_MS: 180_000,
+
+  // Cover letter generation timeout. Shorter than match/review because the
+  // output is a single 250-400 word letter, not a multi-section analysis.
+  AI_COVER_LETTER_TIMEOUT_MS: 120_000,
+
+  // Floor for "too short to be a letter", shared by the agent tool and the
+  // save action so the two cannot drift apart.
+  MIN_COVER_LETTER_CHARS: 10,
 
   // Automation manual run rate limiting
   AUTOMATION_MAX_MANUAL_RUNS_PER_HOUR: 5,
@@ -92,15 +117,92 @@ export const APP_CONSTANTS = {
   MCP_TOKEN_EXPIRY_PRESETS: [30, 90, 365] as const,
   MCP_TOKEN_EXPIRY_DEFAULT_DAYS: 90,
   MCP_TOKEN_MAX_PER_USER: 10,
-  MCP_RATE_LIMIT_MAX: 30,
+  MCP_RATE_LIMIT_MAX: 60,
   MCP_RATE_LIMIT_WINDOW_MS: 60 * 60 * 1000,
   MCP_DEFAULT_JOB_TYPE: "Full-time",
   MCP_DEFAULT_STATUS: "draft",
-  MCP_MATCH_MIN_DESCRIPTION_LENGTH: 200,
+  // Word-count thresholds for job-description completeness. A real posting
+  // runs 300+ words; under 40 is a title/salary stub, not something a fit
+  // score can honestly be computed from.
+  DESCRIPTION_PARTIAL_MIN_WORDS: 40,
+  DESCRIPTION_FULL_MIN_WORDS: 150,
   MCP_MATCH_PROVIDER_MARKER: "mcp",
+  MCP_REVIEW_MIN_RESUME_LENGTH: 400,
+  // Batch items are processed sequentially and each consumes one unit of the
+  // shared MCP rate-limit budget, so this caps a single call at a sixth of it.
+  MCP_BATCH_MAX_ITEMS: 10,
+
+  // Agent chat (in-app tool-calling panel)
+  AGENT_CHAT_CREATED_VIA: "chat",
+  // Provenance on Resume.reviewData, alongside the MCP path's "mcp" marker.
+  AGENT_CHAT_REVIEW_SURFACE: "chat",
+  AGENT_CHAT_MATCH_SURFACE: "chat",
+  AGENT_CHAT_MAX_STEPS: 4,
+  AGENT_CHAT_MAX_STORED_MESSAGES: 50,
+  AGENT_CHAT_HISTORY_MESSAGES: 20,
+  // Message count alone cannot bound context: one review output or resume read
+  // is worth a dozen ordinary turns, and think:true adds 1.2-2.3k chars of
+  // reasoning per turn that persists and replays. Derived from the
+  // AGENT_CHAT_NUM_CTX floor: ~700 system prompt + ~950 tool schemas + ~500
+  // paste head + ~3000 for reasoning and tool args across MAX_STEPS, rounded
+  // up to a ~7000 reserve. Symptom it is too tight: the assistant forgets
+  // things a 20-message window used to carry.
+  AGENT_CHAT_HISTORY_TOKEN_BUDGET: 9000,
+  // No tokenizer dependency: with Ollama, DeepSeek and OpenAI models all
+  // reachable there is no single correct vocab, and a real tokenizer would be
+  // precisely wrong rather than approximately right.
+  AGENT_CHAT_CHARS_PER_TOKEN: 4,
+  // Must clear one nested generation plus the thinking steps around it: two
+  // 15-30s think steps plus a 180s review is ~242s, which the old 240s cut off
+  // after the user had watched the whole review stream in.
+  AGENT_CHAT_TIMEOUT_MS: 300_000,
+  // Deliberately not AI_OLLAMA_NUM_CTX: a chat turn carries a system prompt,
+  // tool schemas, a paste head and history. Raising the shared value would
+  // change review/match latency.
+  AGENT_CHAT_NUM_CTX: 16384,
+  // Below this a paste stays inline text and no chip is made, so add_job
+  // never receives it as pastedText. 1500 sat above a real Indeed posting
+  // (1368 chars): it arrived as plain text, the model still read it as a
+  // paste and omitted jobDescription, and the record was saved from the
+  // model's paraphrase. Sized to clear a terse posting, not a typed sentence.
+  // Not lower: a chip outranks the model's jobDescription in both add_job and
+  // the approval card, so an unrelated paste this side of the threshold gets
+  // saved as the description.
+  AGENT_CHAT_PASTE_THRESHOLD: 1000,
+  AGENT_CHAT_PASTE_HEAD_CHARS: 2000,
+  AGENT_CHAT_PASTE_MAX_CHARS: 120_000,
+  // A paste is spliced into add_job / injected into the prompt only while it
+  // sits within this many trailing user messages. Bounds how long an
+  // abandoned paste can shadow a later typed add.
+  AGENT_CHAT_PASTE_ACTIVE_USER_MESSAGES: 2,
+  // Ceiling on the resume text a get_resume result carries. A preprocessed
+  // resume runs 3-6k chars; this is headroom, not a normal-case trim. It
+  // rides in the model window on every later turn, so it is bounded.
+  AGENT_CHAT_RESUME_MAX_CHARS: 12_000,
+  // No fallback model constant, deliberately. An unset settings.ai.model is
+  // a pre-stream 503 pointing at Settings, not a silently substituted model
+  // the user never chose.
+  // Must not be "ai-panel-width" — that key belongs to the three AI sheets.
+  AGENT_CHAT_PANEL_WIDTH_KEY: "agent-chat-width",
 
   // File uploads
   UPLOADS_DIR: process.env.NODE_ENV !== "production" ? "data" : "/data",
+
+  // Backup caps. Everything is held in RAM at once, so the upload cap is what
+  // bounds memory on a box also running Next and the scheduler; the
+  // uncompressed cap is the zip-bomb guard. 50 MB rather than the spec's 25:
+  // resumes are 5 MB each and PDFs barely deflate, so six of them produce an
+  // export a 25 MB cap would refuse — a backup you cannot restore is worse
+  // than a large one.
+  BACKUP_MAX_UPLOAD_BYTES: 50 * 1024 * 1024,
+  BACKUP_MAX_UNCOMPRESSED_BYTES: 100 * 1024 * 1024,
+  BACKUP_MAX_ENTRIES: 5000,
+  // Pre-import snapshots retained per user. The count alone does not bound
+  // disk — nothing caps one snapshot's size — and these live on the same
+  // volume as the SQLite database, so prune on total bytes as well.
+  BACKUP_SNAPSHOT_KEEP: 5,
+  BACKUP_SNAPSHOT_MAX_TOTAL_BYTES: 250 * 1024 * 1024,
+
   MAX_RESUME_FILE_SIZE_BYTES: 5 * 1024 * 1024, // 5 MB
   RESUME_ALLOWED_MIME_TYPES: [
     "application/pdf",
@@ -139,6 +241,7 @@ export const JOB_SOURCES = [
 ] as const;
 
 export const JOB_STATUSES = [
+  { label: "New", value: "new" },
   { label: "Draft", value: "draft" },
   { label: "Applied", value: "applied" },
   { label: "Interview", value: "interview" },
@@ -147,6 +250,12 @@ export const JOB_STATUSES = [
   { label: "Expired", value: "expired" },
   { label: "Archived", value: "archived" },
 ] as const;
+
+// Zod's z.enum needs a non-empty tuple; JOB_STATUSES is the source of truth.
+export const JOB_STATUS_VALUES = JOB_STATUSES.map((s) => s.value) as unknown as [
+  string,
+  ...string[],
+];
 
 export const DISCOVERY_STATUSES = [
   { label: "New", value: "new" },

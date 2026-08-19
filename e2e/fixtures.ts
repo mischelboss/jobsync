@@ -45,6 +45,28 @@ export async function selectOrCreate(
   await expect(input).not.toBeVisible({ timeout: 15000 });
 }
 
+// Same contract as selectOrCreate, but commits with the Enter key instead of
+// clicking the option — ComboBox handles Enter itself on the create path and
+// defers to cmdk when an option is highlighted, so both branches are covered.
+export async function selectOrCreateWithEnter(
+  page: Page,
+  label: string,
+  placeholder: string,
+  value: string,
+) {
+  await page.getByLabel(label).click();
+  const input = page.getByPlaceholder(placeholder);
+  await input.click();
+  await input.fill(value);
+  const createOption = page.getByText(`Create: ${value}`);
+  const existingOption = page.getByRole("option", { name: value, exact: true });
+  await expect(createOption.or(existingOption).first()).toBeVisible();
+  await input.press("Enter");
+  // Same rationale as selectOrCreate: wait for the popover to close, not the
+  // trigger label, which renders blank after an inline create.
+  await expect(input).not.toBeVisible({ timeout: 15000 });
+}
+
 export async function createNewJob(
   page: Page,
   jobText: string,
@@ -54,15 +76,20 @@ export async function createNewJob(
     beforeSave?: (page: Page) => Promise<void>;
     company?: string;
     location?: string;
+    useEnterKey?: boolean;
   },
 ): Promise<string> {
   const suffix = jobText.replace(/\s+/g, "-");
   const companyText = options?.company ?? `company ${suffix}`;
   const locationText = options?.location ?? `location ${suffix}`;
 
-  await page.getByRole("button", { name: "New Job" }).click();
+  // Matches either entry point: the dashboard quick-action card (labeled
+  // "Job") when starting from /dashboard, or the myjobs page's own inline
+  // trigger (labeled "New Job", from AddJob.tsx) when already on
+  // /dashboard/myjobs — createNewJob is called from both contexts.
+  await page.getByRole("button", { name: /^(New )?Job$/ }).click();
   await expect(page).toHaveURL(/\/dashboard\/myjobs/);
-  // Dashboard's "New Job" button auto-opens the dialog via ?add-job=true.
+  // Dashboard's "Job" button auto-opens the dialog via ?add-job=true.
   await expect(page.getByTestId("add-job-dialog-title")).toBeVisible();
   if (!options?.skipUrl) {
     await page
@@ -73,16 +100,12 @@ export async function createNewJob(
   // Register each Library item the moment it's persisted (the "Create" click
   // saves it via its own server action), so a failure before the job is saved
   // still tears the item down.
-  await selectOrCreate(page, "Job Title", "Create or Search title", jobText);
+  const pick = options?.useEnterKey ? selectOrCreateWithEnter : selectOrCreate;
+  await pick(page, "Job Title", "Create or Search title", jobText);
   cleanup.title(jobText);
-  await selectOrCreate(page, "Company", "Create or Search company", companyText);
+  await pick(page, "Company", "Create or Search company", companyText);
   cleanup.company(companyText);
-  await selectOrCreate(
-    page,
-    "Job Location",
-    "Create or Search location",
-    locationText,
-  );
+  await pick(page, "Job Location", "Create or Search location", locationText);
   cleanup.location(locationText);
 
   await page.getByText("Part-time").click();
@@ -123,8 +146,10 @@ export type CleanupRegistry = {
   company: (name: string) => void;
   location: (name: string) => void;
   activityType: (name: string) => void;
+  activity: (name: string) => void;
   tag: (name: string) => void;
   mcpToken: (name: string) => void;
+  automation: (name: string) => void;
 };
 
 type Fixtures = {
@@ -148,8 +173,10 @@ export const test = base.extend<Fixtures>({
     const companies: string[] = [];
     const locations: string[] = [];
     const activityTypes: string[] = [];
+    const activities: string[] = [];
     const tags: string[] = [];
     const mcpTokens: string[] = [];
+    const automations: string[] = [];
     await use({
       job: (id) => jobIds.push(id),
       resume: (title) => resumes.push(title),
@@ -159,8 +186,10 @@ export const test = base.extend<Fixtures>({
       company: (name) => companies.push(name),
       location: (name) => locations.push(name),
       activityType: (name) => activityTypes.push(name),
+      activity: (name) => activities.push(name),
       tag: (name) => tags.push(name),
       mcpToken: (name) => mcpTokens.push(name),
+      automation: (name) => automations.push(name),
     });
     // page.request carries the session cookie; page is still alive here
     // because cleanup tears down before the page fixture.
@@ -174,8 +203,10 @@ export const test = base.extend<Fixtures>({
         companies,
         locations,
         activityTypes,
+        activities,
         tags,
         mcpTokens,
+        automations,
       },
     });
     if (!res.ok()) {

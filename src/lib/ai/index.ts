@@ -29,6 +29,8 @@ export {
   buildJobImportPrompt,
   EMAIL_ALERT_SYSTEM_PROMPT,
   buildEmailAlertPrompt,
+  COVER_LETTER_SYSTEM_PROMPT,
+  buildCoverLetterPrompt,
 } from "./prompts";
 
 // Analysis tools

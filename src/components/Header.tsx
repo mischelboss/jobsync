@@ -10,13 +10,10 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { SIDEBAR_LINKS } from "@/lib/constants";
-import { signOut } from "@/auth";
-import { getCurrentUser } from "@/utils/user.utils";
-import { ProfileDropdown } from "./ProfileDropdown";
+import SidebarToggle from "./SidebarToggle";
+import { AgentChatTrigger } from "./AgentChatTrigger";
 
 async function Header() {
-  // const session = await auth();
-  const user = await getCurrentUser();
   return (
     <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-background px-4 sm:static sm:h-auto sm:border-0 sm:bg-transparent sm:px-6">
       <Sheet>
@@ -31,7 +28,7 @@ async function Header() {
           <nav className="grid gap-6 text-lg font-medium">
             <SheetClose asChild>
               <Link
-                href="/"
+                href="/dashboard"
                 className="group flex h-10 w-10 shrink-0 items-center justify-center gap-2 rounded-full bg-primary text-lg font-semibold text-primary-foreground md:text-base"
               >
                 <Briefcase className="h-5 w-5 transition-all group-hover:scale-110" />
@@ -58,7 +55,10 @@ async function Header() {
           </nav>
         </SheetContent>
       </Sheet>
-      <h1 className="font-semibold">JobSync - Job Search Assistant</h1>
+      <SidebarToggle />
+      <h1 className="font-semibold">
+        JobSync<span className="hidden sm:inline"> - Job Search Assistant</span>
+      </h1>
       <div className="relative ml-auto flex-1 md:grow-0">
         {/* <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
         <Input
@@ -69,13 +69,7 @@ async function Header() {
         /> */}
       </div>
 
-      <ProfileDropdown
-        user={user}
-        signOutAction={async () => {
-          "use server";
-          await signOut({ redirectTo: "/signin" });
-        }}
-      />
+      <AgentChatTrigger />
     </header>
   );
 }
