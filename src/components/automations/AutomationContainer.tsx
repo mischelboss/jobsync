@@ -1,11 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Card, CardContent, CardTitle } from "@/components/ui/card";
 import { ResponsiveCardHeader } from "@/components/ResponsiveCardHeader";
 import { Button } from "@/components/ui/button";
 import { Plus, RefreshCw } from "lucide-react";
-import { toast } from "@/components/ui/use-toast";
+import { toastError } from "@/lib/toast";
 import { getAutomationsList } from "@/actions/automation.actions";
 import type { AutomationWithResume } from "@/models/automation.model";
 import { AutomationList } from "./AutomationList";
@@ -22,11 +23,14 @@ interface AutomationContainerProps {
 }
 
 export function AutomationContainer({ resumes }: AutomationContainerProps) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [automations, setAutomations] = useState<AutomationWithResume[]>([]);
   const [loading, setLoading] = useState(true);
   const [wizardOpen, setWizardOpen] = useState(false);
   const [editAutomation, setEditAutomation] =
     useState<AutomationWithResume | null>(null);
+  const autoOpenHandled = useRef(false);
 
   const loadAutomations = useCallback(async () => {
     setLoading(true);
@@ -35,11 +39,7 @@ export function AutomationContainer({ resumes }: AutomationContainerProps) {
     if (result.success && result.data) {
       setAutomations(result.data);
     } else {
-      toast({
-        title: "Error",
-        description: result.message || "Failed to load automations",
-        variant: "destructive",
-      });
+      toastError(result.message || "Failed to load automations");
     }
     setLoading(false);
   }, []);
@@ -47,6 +47,20 @@ export function AutomationContainer({ resumes }: AutomationContainerProps) {
   useEffect(() => {
     loadAutomations();
   }, [loadAutomations]);
+
+  useEffect(() => {
+    if (autoOpenHandled.current) return;
+    if (searchParams.get("add-automation") === "true") {
+      autoOpenHandled.current = true;
+      setWizardOpen(true);
+      const params = new URLSearchParams(searchParams.toString());
+      params.delete("add-automation");
+      const newPath = params.toString()
+        ? `?${params.toString()}`
+        : window.location.pathname;
+      router.replace(newPath);
+    }
+  }, [router, searchParams]);
 
   const handleEdit = (automation: AutomationWithResume) => {
     setEditAutomation(automation);
@@ -96,6 +110,7 @@ export function AutomationContainer({ resumes }: AutomationContainerProps) {
         open={wizardOpen}
         onOpenChange={handleWizardClose}
         resumes={resumes}
+        automations={automations}
         onSuccess={handleSuccess}
         editAutomation={editAutomation}
       />

@@ -3,14 +3,16 @@
 import { useMemo, useState } from "react";
 import MarkdownIt from "markdown-it";
 import { format } from "date-fns";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { TipTapContentViewer } from "@/components/TipTapContentViewer";
+import { AgentReviewScoreCard } from "@/components/agent/AgentReviewScoreCard";
 import type { ResumeReviewData } from "@/models/ai.schemas";
 
 // html:false escapes any raw HTML in the model output; TipTapContentViewer
@@ -32,24 +34,29 @@ export function ReviewDetails({ reviewData }: ReviewDetailsProps) {
 
   return (
     <Collapsible open={expanded} onOpenChange={setExpanded}>
-      <div className="space-y-1">
-        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-          <span className="text-lg font-semibold">
-            Overall {reviewData.overall}
-          </span>
-          <span className="text-sm text-muted-foreground">
-            Impact {reviewData.impact} · Clarity {reviewData.clarity} · ATS{" "}
-            {reviewData.atsCompatibility}
-          </span>
+      <div className="space-y-3">
+        <AgentReviewScoreCard scores={reviewData} size={130} />
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+          {reviewData.reviewedAt ? (
+            <span>
+              Reviewed on{" "}
+              {format(
+                new Date(reviewData.reviewedAt),
+                "MMM d, yyyy 'at' h:mm a",
+              )}
+            </span>
+          ) : null}
+          {reviewData.provider === "mcp"
+            ? reviewData.model && (
+                <Badge className="gap-1 bg-violet-500 dark:bg-violet-400">
+                  <Sparkles className="h-3.5 w-3.5" />
+                  via {reviewData.model}
+                </Badge>
+              )
+            : reviewData.provider
+              ? `using ${reviewData.provider}${reviewData.model ? ` / ${reviewData.model}` : ""}`
+              : null}
         </div>
-        <p className="text-xs text-muted-foreground">
-          {reviewData.reviewedAt
-            ? `Reviewed on ${format(new Date(reviewData.reviewedAt), "MMM d, yyyy 'at' h:mm a")}`
-            : null}
-          {reviewData.provider
-            ? ` using ${reviewData.provider}${reviewData.model ? ` / ${reviewData.model}` : ""}`
-            : null}
-        </p>
       </div>
 
       <CollapsibleTrigger asChild>

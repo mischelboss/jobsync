@@ -40,7 +40,7 @@ import {
   createAutomation,
   updateAutomation,
 } from "@/actions/automation.actions";
-import { toast } from "@/components/ui/use-toast";
+import { toastSuccess, toastError } from "@/lib/toast";
 import type {
   AutomationWithResume,
   JobBoard,
@@ -85,6 +85,7 @@ interface AutomationWizardProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   resumes: Resume[];
+  automations: AutomationWithResume[];
   onSuccess: () => void;
   editAutomation?: AutomationWithResume | null;
 }
@@ -107,6 +108,7 @@ export function AutomationWizard({
   open,
   onOpenChange,
   resumes,
+  automations,
   onSuccess,
   editAutomation,
 }: AutomationWizardProps) {
@@ -164,29 +166,21 @@ export function AutomationWizard({
         : await createAutomation(data);
 
       if (result.success) {
-        toast({
-          title: editAutomation ? "Automation updated" : "Automation created",
-          description: editAutomation
+        toastSuccess(
+          editAutomation
             ? "Your automation has been updated successfully."
             : "Your automation has been created and will run at the scheduled time.",
-        });
+          editAutomation ? "Automation updated" : "Automation created",
+        );
         form.reset();
         setStep(0);
         onOpenChange(false);
         onSuccess();
       } else {
-        toast({
-          title: "Error",
-          description: result.message || "Something went wrong",
-          variant: "destructive",
-        });
+        toastError(result.message || "Something went wrong");
       }
     } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to save automation",
-        variant: "destructive",
-      });
+      toastError("Failed to save automation");
     } finally {
       setIsSubmitting(false);
     }
@@ -229,7 +223,25 @@ export function AutomationWizard({
     }
   };
 
+  // Hours already claimed by the user's other automations. Only one automation
+  // may run per hourly slot, so the schedule step rejects a taken hour.
+  const takenHours = new Set(
+    automations
+      .filter((a) => a.id !== editAutomation?.id)
+      .map((a) => a.scheduleHour),
+  );
+
   const nextStep = () => {
+    if (step === 4 && takenHours.has(formValues.scheduleHour)) {
+      form.setError("scheduleHour", {
+        message: `Another automation already runs at ${(
+          formValues.scheduleHour ?? 8
+        )
+          .toString()
+          .padStart(2, "0")}:00. Please choose a different time.`,
+      });
+      return;
+    }
     if (step < STEPS.length - 1) {
       setStep(step + 1);
     }
@@ -576,7 +588,10 @@ export function AutomationWizard({
               <FormItem>
                 <FormLabel>Daily Run Time</FormLabel>
                 <Select
-                  onValueChange={(val) => field.onChange(parseInt(val))}
+                  onValueChange={(val) => {
+                    field.onChange(parseInt(val));
+                    form.clearErrors("scheduleHour");
+                  }}
                   value={field.value.toString()}
                 >
                   <FormControl>
@@ -591,6 +606,11 @@ export function AutomationWizard({
                         value={hour.value.toString()}
                       >
                         {hour.label}
+                        {takenHours.has(hour.value) && (
+                          <span className="ml-2 text-xs text-muted-foreground">
+                            In use
+                          </span>
+                        )}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -754,11 +774,7 @@ export function AutomationWizard({
             onSubmit={form.handleSubmit(onSubmit, (errors) => {
               const firstError = Object.values(errors)[0];
               if (firstError?.message) {
-                toast({
-                  title: "Validation Error",
-                  description: firstError.message as string,
-                  variant: "destructive",
-                });
+                toastError(firstError.message as string, "Validation Error");
               }
             })}
           >

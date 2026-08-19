@@ -2,6 +2,7 @@
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogOverlay,
   DialogTitle,
@@ -17,7 +18,7 @@ import { AddTaskFormSchema } from "@/models/addTaskForm.schema";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Task, TASK_STATUSES, TaskStatus } from "@/models/task.model";
 import { z } from "zod";
-import { toast } from "../ui/use-toast";
+import { toastActionResult } from "@/lib/toast";
 import {
   Form,
   FormControl,
@@ -41,6 +42,7 @@ type TaskFormProps = {
   onTaskSaved: () => void;
   dialogOpen: boolean;
   setDialogOpen: (open: boolean) => void;
+  onSaveAndStart?: (taskId: string) => void;
 };
 
 const statusOptions = Object.entries(TASK_STATUSES).map(([value, label]) => ({
@@ -56,6 +58,7 @@ export function TaskForm({
   onTaskSaved,
   dialogOpen,
   setDialogOpen,
+  onSaveAndStart,
 }: TaskFormProps) {
   const [isPending, startTransition] = useTransition();
   const form = useForm<z.infer<typeof AddTaskFormSchema>>({
@@ -102,32 +105,36 @@ export function TaskForm({
     }
   }, [editTask, reset]);
 
-  function onSubmit(data: z.infer<typeof AddTaskFormSchema>) {
+  function onSubmit(
+    data: z.infer<typeof AddTaskFormSchema>,
+    startAfterSave = false,
+  ) {
     startTransition(async () => {
-      const { success, message } = editTask
-        ? await updateTask(data)
-        : await createTask(data);
-
-      if (success) {
-        toast({
-          variant: "success",
-          description: `Task has been ${editTask ? "updated" : "created"} successfully`,
-        });
-        reset();
-        setDialogOpen(false);
-        resetEditTask();
-        onTaskSaved();
-      } else {
-        toast({
-          variant: "destructive",
-          title: "Error!",
-          description: message,
-        });
-      }
+      const result = editTask ? await updateTask(data) : await createTask(data);
+      toastActionResult<Task>(result, {
+        success: `Task has been ${editTask ? "updated" : "created"} successfully`,
+        onSuccess: (task) => {
+          reset();
+          setDialogOpen(false);
+          resetEditTask();
+          onTaskSaved();
+          if (startAfterSave && task?.id) {
+            onSaveAndStart?.(task.id);
+          }
+        },
+      });
     });
   }
 
+  const onSaveClick = form.handleSubmit((data) => onSubmit(data, false));
+  const onSaveAndStartClick = form.handleSubmit((data) =>
+    onSubmit(data, true),
+  );
+
   const pageTitle = editTask ? "Edit Task" : "Add Task";
+  const pageDescription = editTask
+    ? "Update the details of this task."
+    : "Add a new task to track.";
 
   const closeDialog = () => {
     reset();
@@ -143,10 +150,11 @@ export function TaskForm({
             <DialogTitle data-testid="task-form-dialog-title">
               {pageTitle}
             </DialogTitle>
+            <DialogDescription>{pageDescription}</DialogDescription>
           </DialogHeader>
           <Form {...form}>
             <form
-              onSubmit={form.handleSubmit(onSubmit)}
+              onSubmit={onSaveClick}
               className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4"
             >
               {/* Title */}
@@ -196,7 +204,7 @@ export function TaskForm({
                   control={form.control}
                   name="status"
                   render={({ field }) => (
-                    <FormItem className="flex flex-col [&>button]:capitalize">
+                    <FormItem className="flex flex-col">
                       <FormLabel>Status</FormLabel>
                       <SelectFormCtrl
                         label="Task Status"
@@ -341,7 +349,23 @@ export function TaskForm({
                       Cancel
                     </Button>
                   </div>
-                  <Button type="submit" data-testid="save-task-btn">
+                  {onSaveAndStart && (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      className="mt-2 md:mt-0"
+                      onClick={onSaveAndStartClick}
+                      disabled={isPending}
+                      data-testid="save-and-start-task-btn"
+                    >
+                      Save & Start
+                    </Button>
+                  )}
+                  <Button
+                    type="submit"
+                    disabled={isPending}
+                    data-testid="save-task-btn"
+                  >
                     Save
                     {isPending && (
                       <Loader className="h-4 w-4 shrink-0 spinner ml-2" />

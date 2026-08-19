@@ -98,6 +98,37 @@ describe("streamResumeImport", () => {
     expect(data.experience[0].company).toBe("Acme");
   });
 
+  it("throws the provider message carried on the error line", async () => {
+    const message =
+      "Invalid parameter: 'text.format' of type 'json_schema' is not supported with model version `gpt-3.5-turbo`.";
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        streamingResponse([JSON.stringify({ __error: message }) + "\n"]),
+      ),
+    );
+
+    await expect(
+      streamResumeImport({ resumeId: "r1", selectedModel }),
+    ).rejects.toThrow(message);
+  });
+
+  it("prefers salvaged data over a trailing error line", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        streamingResponse([
+          '{"summary":"Partial."}\n',
+          '{"__error":"stream died"}\n',
+        ]),
+      ),
+    );
+
+    const { data } = await streamResumeImport({ resumeId: "r1", selectedModel });
+
+    expect(data.summary).toBe("Partial.");
+  });
+
   it("throws the server error message on a non-ok response", async () => {
     vi.stubGlobal(
       "fetch",

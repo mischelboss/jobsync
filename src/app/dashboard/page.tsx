@@ -13,7 +13,6 @@ import NumberCardToggle from "@/components/dashboard/NumberCardToggle";
 import RecentCardToggle from "@/components/dashboard/RecentCardToggle";
 import TopActivitiesCard from "@/components/dashboard/TopActivitiesCard";
 import WeeklyBarChartToggle from "@/components/dashboard/WeeklyBarChartToggle";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 import { Metadata } from "next";
 
@@ -54,8 +53,8 @@ export default async function Dashboard() {
     );
   return (
     <>
-      <div className="grid auto-rows-max items-start gap-2 md:gap-2 lg:col-span-2">
-        <div className="grid gap-2 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-4">
+      <div className="@container grid grid-cols-1 auto-rows-max items-start gap-2 md:gap-2 @3xl/main:col-span-2">
+        <div className="grid gap-2 @lg:grid-cols-4">
           <JobsApplied />
           <NumberCardToggle
             data={[
@@ -96,24 +95,14 @@ export default async function Dashboard() {
           ]}
         />
       </div>
-      <div>
+      <div className="@3xl/main:relative @3xl/main:self-stretch">
         <RecentCardToggle jobs={recentJobs} activities={recentActivities} />
       </div>
       <div className="w-full col-span-3">
-        <Tabs defaultValue={activityCalendarDataKeys.at(-1)}>
-          <TabsList className="w-full justify-start overflow-x-auto">
-            {activityCalendarDataKeys.map((year) => (
-              <TabsTrigger key={year} value={year}>
-                {year}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-          {activityCalendarDataKeys.map((year) => (
-            <TabsContent key={year} value={year}>
-              <ActivityCalendar year={year} data={activityCalendarData[year]} />
-            </TabsContent>
-          ))}
-        </Tabs>
+        <ActivityCalendar
+          years={activityCalendarDataKeys}
+          dataByYear={activityCalendarData}
+        />
       </div>
     </>
   );

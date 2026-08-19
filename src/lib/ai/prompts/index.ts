@@ -66,3 +66,9 @@ export {
   INTERVIEW_PROCESS_SYSTEM_PROMPT,
   buildInterviewProcessPrompt,
 } from "./interview-process";
+
+// Cover Letter exports
+export {
+  COVER_LETTER_SYSTEM_PROMPT,
+  buildCoverLetterPrompt,
+} from "./cover-letter";

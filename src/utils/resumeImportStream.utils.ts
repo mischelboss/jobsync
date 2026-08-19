@@ -53,6 +53,7 @@ export async function streamResumeImport({
   const decoder = new TextDecoder();
   let buffer = "";
   let latest: DeepPartial<ResumeImportData> | undefined;
+  let streamError: string | undefined;
 
   const handleLine = (line: string) => {
     const trimmed = line.trim();
@@ -60,6 +61,12 @@ export async function streamResumeImport({
     try {
       const obj = JSON.parse(trimmed);
       if (obj && typeof obj === "object") {
+        // Sentinel line: the provider's message, which can only travel in-band
+        // because the route has already committed a 200.
+        if (typeof obj.__error === "string") {
+          streamError = obj.__error;
+          return;
+        }
         latest = obj as DeepPartial<ResumeImportData>;
         onPartial?.(latest);
       }
@@ -87,7 +94,8 @@ export async function streamResumeImport({
 
   if (!latest || typeof latest !== "object") {
     throw new Error(
-      "The AI service returned no data. Please ensure it is running and try again.",
+      streamError ??
+        "The AI service returned no data. Please ensure it is running and try again.",
     );
   }
 

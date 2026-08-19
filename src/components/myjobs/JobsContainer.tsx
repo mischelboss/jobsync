@@ -9,14 +9,14 @@ import {
 } from "../ui/card";
 import { Button } from "../ui/button";
 import { SearchInput } from "../SearchInput";
-import { File, ListFilter, Loader, X } from "lucide-react";
+import { File, ListFilter, Loader, RefreshCw, X } from "lucide-react";
 import {
   deleteJobById,
   getJobDetails,
   getJobsList,
   updateJobStatus,
 } from "@/actions/job.actions";
-import { toast } from "../ui/use-toast";
+import { toastError, toastSuccess } from "@/lib/toast";
 import {
   Company,
   JobImportData,
@@ -25,6 +25,7 @@ import {
   JobResponse,
   JobSource,
   JobStatus,
+  JobsViewMode,
   JobTitle,
   Tag,
 } from "@/models/job.model";
@@ -44,9 +45,13 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { AddJob } from "./AddJob";
 import { ImportJobPdf } from "./ImportJobPdf";
 import MyJobsTable from "./MyJobsTable";
+import MyJobsGrid from "./MyJobsGrid";
+import { JobsViewToggle } from "./JobsViewToggle";
 import { NoteDialog } from "./NoteDialog";
 import { format } from "date-fns";
 import { RecordsCount } from "../RecordsCount";
+import { getFromLocalStorage, saveToLocalStorage } from "@/utils/localstorage.utils";
+import { useAgentChat } from "../agent/AgentChatProvider";
 
 type MyJobsProps = {
   statuses: JobStatus[];
@@ -67,6 +72,7 @@ function JobsContainer({
 }: MyJobsProps) {
   const router = useRouter();
   const pathname = usePathname();
+  const { jobWrites } = useAgentChat();
   const queryParams = useSearchParams();
   const createQueryString = useCallback(
     (name: string, value: string) => {
@@ -93,6 +99,7 @@ function JobsContainer({
     queryParams.get("applied") === "true",
   );
   const [jobs, setJobs] = useState<JobResponse[]>([]);
+  const [viewMode, setViewMode] = useState<JobsViewMode>("table");
   const [page, setPage] = useState(1);
   const [totalJobs, setTotalJobs] = useState(0);
   const [filterKey, setFilterKey] = useState<string>("none");
@@ -159,6 +166,21 @@ function JobsContainer({
     setAppliedFilter(ap);
   }, [queryParams]);
 
+  // Read after mount: localStorage is unavailable during SSR, so seeding the
+  // initial state from it would cause a hydration mismatch.
+  useEffect(() => {
+    const saved = getFromLocalStorage(
+      APP_CONSTANTS.JOBS_VIEW_MODE_STORAGE_KEY,
+      null,
+    );
+    if (saved === "cards" || saved === "table") setViewMode(saved);
+  }, []);
+
+  const onChangeViewMode = (mode: JobsViewMode) => {
+    setViewMode(mode);
+    saveToLocalStorage(APP_CONSTANTS.JOBS_VIEW_MODE_STORAGE_KEY, mode);
+  };
+
   const jobsPerPage = APP_CONSTANTS.RECORDS_PER_PAGE;
 
   const loadJobs = useCallback(
@@ -181,11 +203,7 @@ function JobsContainer({
         setTotalJobs(total);
         setPage(page);
       } else {
-        toast({
-          variant: "destructive",
-          title: "Error!",
-          description: message,
-        });
+        toastError(message);
       }
       setInitialLoading(false);
       setLoadingMore(false);
@@ -210,16 +228,9 @@ function JobsContainer({
   const onDeleteJob = async (jobId: string) => {
     const { res, success, message } = await deleteJobById(jobId);
     if (success) {
-      toast({
-        variant: "success",
-        description: `Job has been deleted successfully`,
-      });
+      toastSuccess(`Job has been deleted successfully`);
     } else {
-      toast({
-        variant: "destructive",
-        title: "Error!",
-        description: message,
-      });
+      toastError(message);
     }
     reloadJobs();
   };
@@ -227,11 +238,7 @@ function JobsContainer({
   const onEditJob = async (jobId: string) => {
     const { job, success, message } = await getJobDetails(jobId);
     if (!success) {
-      toast({
-        variant: "destructive",
-        title: "Error!",
-        description: message,
-      });
+      toastError(message);
       return;
     }
     setEditJob(job);
@@ -241,16 +248,9 @@ function JobsContainer({
     const { success, message } = await updateJobStatus(jobId, jobStatus);
     if (success) {
       router.refresh();
-      toast({
-        variant: "success",
-        description: `Job has been updated successfully`,
-      });
+      toastSuccess(`Job has been updated successfully`);
     } else {
-      toast({
-        variant: "destructive",
-        title: "Error!",
-        description: message,
-      });
+      toastError(message);
     }
     reloadJobs();
   };
@@ -289,6 +289,15 @@ function JobsContainer({
   useEffect(() => {
     (async () => await loadJobs(1))();
   }, [loadJobs]);
+
+  // The agent saves the job server-side, so only this counter tells us a row
+  // appeared. Deps are the counter alone: reloadJobs changes with every filter
+  // and keystroke, and the effects above already cover those.
+  useEffect(() => {
+    if (jobWrites === 0) return;
+    void reloadJobs();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jobWrites]);
 
   useEffect(() => {
     if (searchTerm !== "") {
@@ -360,25 +369,19 @@ function JobsContainer({
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      toast({
-        variant: "success",
-        title: "Downloaded successfully!",
-      });
+      toastSuccess("Downloaded successfully!");
     } catch (error) {
-      toast({
-        variant: "destructive",
-        title: "Error!",
-        description:
-          error instanceof Error ? error.message : "Unknown error occurred.",
-      });
+      toastError(
+        error instanceof Error ? error.message : "Unknown error occurred.",
+      );
     }
   };
 
   return (
     <>
       <Card x-chunk="dashboard-06-chunk-0">
-        <CardHeader className="flex-col gap-3 sm:flex-row sm:justify-between sm:items-center">
-          <div className="flex items-baseline gap-2">
+        <CardHeader className="flex-row flex-wrap justify-between items-center gap-3">
+          <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
             <CardTitle>Jobs</CardTitle>
             {!initialLoading && totalJobs > 0 && (
               <RecordsCount
@@ -388,7 +391,8 @@ function JobsContainer({
               />
             )}
           </div>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-2 ml-auto">
+            <JobsViewToggle value={viewMode} onChange={onChangeViewMode} />
             {companyLabel && (
               <button
                 onClick={clearCompanyFilter}
@@ -425,6 +429,19 @@ function JobsContainer({
                 <X className="h-3.5 w-3.5" />
               </button>
             )}
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 w-8 p-0"
+              disabled={initialLoading}
+              title="Reload jobs"
+              onClick={() => loadJobs(1, filterKey, searchTerm || undefined)}
+            >
+              <RefreshCw
+                className={`h-3.5 w-3.5 ${initialLoading ? "animate-spin" : ""}`}
+              />
+              <span className="sr-only">Reload jobs</span>
+            </Button>
             <SearchInput
               value={searchTerm}
               onChange={setSearchTerm}
@@ -448,8 +465,12 @@ function JobsContainer({
                   <SelectItem value="draft">Draft</SelectItem>
                   <SelectItem value="rejected">Rejected</SelectItem>
                   <SelectItem value="PT">Part-time</SelectItem>
-                  <SelectItem value="accepted">Accepted (discovered)</SelectItem>
-                  <SelectItem value="dismissed">Dismissed (discovered)</SelectItem>
+                  <SelectItem value="accepted">
+                    Accepted (discovered)
+                  </SelectItem>
+                  <SelectItem value="dismissed">
+                    Dismissed (discovered)
+                  </SelectItem>
                 </SelectGroup>
               </SelectContent>
             </Select>
@@ -483,8 +504,17 @@ function JobsContainer({
         </CardHeader>
         <CardContent>
           {initialLoading && <Loading />}
-          {jobs.length > 0 && (
-            <>
+          {jobs.length > 0 &&
+            (viewMode === "cards" ? (
+              <MyJobsGrid
+                jobs={jobs}
+                jobStatuses={statuses}
+                deleteJob={onDeleteJob}
+                editJob={onEditJob}
+                onChangeJobStatus={onChangeJobStatus}
+                onAddNote={onAddNote}
+              />
+            ) : (
               <MyJobsTable
                 jobs={jobs}
                 jobStatuses={statuses}
@@ -493,8 +523,7 @@ function JobsContainer({
                 onChangeJobStatus={onChangeJobStatus}
                 onAddNote={onAddNote}
               />
-            </>
-          )}
+            ))}
           {jobs.length < totalJobs && (
             <div ref={sentinelRef} className="flex justify-center p-4">
               {loadingMore && (

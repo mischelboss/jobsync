@@ -52,6 +52,11 @@ vi.mock("next/navigation", () => ({
   useSearchParams: vi.fn(),
 }));
 
+// useAgentChat throws outside the provider, which this spec does not mount.
+vi.mock("@/components/agent/AgentChatProvider", () => ({
+  useAgentChat: () => ({ jobWrites: 0 }),
+}));
+
 global.ResizeObserver = class ResizeObserver {
   observe() {}
   unobserve() {}
@@ -625,11 +630,51 @@ describe("JobsContainer Search Functionality", () => {
 
   describe("Infinite Scroll with Search", () => {
     it("should preserve search term when loading more via scroll", async () => {
-      (getJobsList as any).mockResolvedValue({
-        success: true,
-        data: mockJobs,
-        total: 50,
-      });
+      (getJobsList as any)
+        .mockResolvedValueOnce({
+          success: true,
+          data: mockJobs,
+          total: 50,
+        })
+        .mockResolvedValueOnce({
+          success: true,
+          data: mockJobs,
+          total: 50,
+        })
+        .mockResolvedValueOnce({
+          success: true,
+          data: [
+            {
+              id: "3",
+              userId: "user-1",
+              JobTitle: {
+                id: "3",
+                label: "Backend Developer",
+                value: "backend developer",
+                createdBy: "user-1",
+              },
+              Company: {
+                id: "3",
+                label: "Meta",
+                value: "meta",
+                createdBy: "user-1",
+                logoUrl: "",
+              },
+              Location: {
+                id: "3",
+                label: "New York",
+                value: "new york",
+                createdBy: "user-1",
+              },
+              Status: { id: "1", label: "Applied", value: "applied" },
+              JobSource: { id: "1", label: "Indeed", value: "indeed" },
+              jobType: "FT",
+              appliedDate: new Date("2024-06-21"),
+              dueDate: new Date("2024-06-26"),
+            },
+          ],
+          total: 50,
+        });
 
       renderComponent();
 
@@ -1019,6 +1064,50 @@ describe("JobsContainer Search Functionality", () => {
       await waitFor(() => {
         expect(screen.queryByTestId("add-job-dialog-title")).not.toBeInTheDocument();
       });
+    });
+  });
+
+  describe("view mode toggle", () => {
+    beforeEach(() => {
+      localStorage.clear();
+    });
+
+    it("renders the table by default and switches to cards on toggle", async () => {
+      (getJobsList as any).mockResolvedValue({
+        success: true,
+        data: mockJobs,
+        total: 2,
+      });
+
+      renderComponent();
+
+      await waitFor(() =>
+        expect(screen.getByRole("table")).toBeInTheDocument(),
+      );
+
+      await user.click(screen.getByTestId("jobs-view-cards-btn"));
+
+      expect(screen.queryByRole("table")).not.toBeInTheDocument();
+      expect(localStorage.getItem("jobs-view-mode")).toBe('"cards"');
+    });
+
+    it("restores the persisted card view on mount", async () => {
+      localStorage.setItem("jobs-view-mode", '"cards"');
+      (getJobsList as any).mockResolvedValue({
+        success: true,
+        data: mockJobs,
+        total: 2,
+      });
+
+      renderComponent();
+
+      await waitFor(() =>
+        expect(screen.getByTestId("jobs-view-cards-btn")).toHaveAttribute(
+          "aria-pressed",
+          "true",
+        ),
+      );
+      expect(screen.queryByRole("table")).not.toBeInTheDocument();
     });
   });
 });

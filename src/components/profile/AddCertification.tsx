@@ -7,10 +7,11 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import {
   Dialog,
   DialogContent,
-  DialogFooter,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "../ui/dialog";
+import { FormDialogFooter } from "../FormDialogFooter";
 import {
   Form,
   FormControl,
@@ -22,10 +23,8 @@ import {
 import { Input } from "../ui/input";
 import { DatePicker } from "../DatePicker";
 import { Switch } from "../ui/switch";
-import { Button } from "../ui/button";
 import { useEffect, useTransition } from "react";
-import { toast } from "../ui/use-toast";
-import { Loader } from "lucide-react";
+import { toastSuccess, toastError } from "@/lib/toast";
 import {
   addCertification,
   updateCertification,
@@ -49,6 +48,9 @@ function AddCertification({
   const pageTitle = certificationToEdit
     ? "Edit Certification / License"
     : "Add Certification / License";
+  const pageDescription = certificationToEdit
+    ? "Update this certification or license on your resume."
+    : "Add a certification or license to your resume.";
   const [isPending, startTransition] = useTransition();
 
   const form = useForm<z.infer<typeof AddCertificationFormSchema>>({
@@ -104,20 +106,13 @@ function AddCertification({
         ? await updateCertification(data)
         : await addCertification(data);
       if (!res.success) {
-        toast({
-          variant: "destructive",
-          title: "Error!",
-          description: res.message,
-        });
+        toastError(res.message);
       } else {
         reset();
         setDialogOpen(false);
-        toast({
-          variant: "success",
-          description: `Certification has been ${
-            certificationToEdit ? "updated" : "added"
-          } successfully`,
-        });
+        toastSuccess(`Certification has been ${
+          certificationToEdit ? "updated" : "added"
+        } successfully`);
       }
     });
   };
@@ -129,6 +124,7 @@ function AddCertification({
       <DialogContent className="h-full md:h-[85%] lg:max-h-screen md:max-w-[40rem] overflow-y-scroll">
         <DialogHeader>
           <DialogTitle>{pageTitle}</DialogTitle>
+          <DialogDescription>{pageDescription}</DialogDescription>
         </DialogHeader>
         <Form {...form}>
           <form
@@ -287,24 +283,11 @@ function AddCertification({
               />
             </div>
 
-            <div className="md:col-span-2 mt-4">
-              <DialogFooter>
-                <div>
-                  <Button
-                    type="reset"
-                    variant="outline"
-                    className="mt-2 md:mt-0 w-full"
-                    onClick={closeDialog}
-                  >
-                    Cancel
-                  </Button>
-                </div>
-                <Button type="submit" disabled={!formState.isDirty}>
-                  Save
-                  {isPending && <Loader className="h-4 w-4 shrink-0 spinner" />}
-                </Button>
-              </DialogFooter>
-            </div>
+            <FormDialogFooter
+              onCancel={closeDialog}
+              isPending={isPending}
+              saveDisabled={!formState.isDirty}
+            />
           </form>
         </Form>
       </DialogContent>

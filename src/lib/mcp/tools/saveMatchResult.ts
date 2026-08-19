@@ -5,13 +5,7 @@ import { McpSaveMatchResultSchema } from "@/models/mcp.schema";
 import { checkMcpRateLimit } from "@/lib/mcp/rate-limit";
 import { parseJobMatch } from "@/lib/ai/jobMatch/parse";
 import type { JobMatchData } from "@/models/ai.schemas";
-
-export const saveMatchResultToolDefinition = {
-  name: "save_match_result",
-  description:
-    "Persist a job-fit match analysis (produced by you, the agent) against a job previously created with add_job. Call this after add_job hands you a match directive.",
-  inputSchema: McpSaveMatchResultSchema,
-} as const;
+import type { DescriptionCompleteness } from "@/models/job.model";
 
 export async function handleSaveMatchResult(
   input: z.infer<typeof McpSaveMatchResultSchema>,
@@ -68,6 +62,13 @@ export async function handleSaveMatchResult(
       : null;
   }
 
+  // Same scope as the update below, so a job the caller can't write to
+  // never leaks its completeness through this read either.
+  const job = await prisma.job.findFirst({
+    where: { id: input.jobId, userId, createdVia: { not: null } },
+    select: { descriptionCompleteness: true },
+  });
+
   const matchData: JobMatchData = {
     matchScore: parsed.scores.matchScore,
     recommendation: parsed.scores.recommendation,
@@ -78,6 +79,8 @@ export async function handleSaveMatchResult(
     provider: APP_CONSTANTS.MCP_MATCH_PROVIDER_MARKER,
     model: tokenName,
     analyzed: true,
+    descriptionCompleteness:
+      (job?.descriptionCompleteness as DescriptionCompleteness | null) ?? undefined,
   };
 
   try {

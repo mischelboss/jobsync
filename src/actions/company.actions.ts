@@ -1,6 +1,7 @@
 "use server";
 import prisma from "@/lib/db";
 import { handleError } from "@/lib/utils";
+import { canonicalizeEntityValue } from "@/lib/jobs/canonicalize";
 import { AddCompanyFormSchema } from "@/models/addCompanyForm.schema";
 import { getCurrentUser } from "@/utils/user.utils";
 import { APP_CONSTANTS } from "@/lib/constants";
@@ -11,6 +12,7 @@ export const getCompanyList = async (
   page: number = 1,
   limit: number = APP_CONSTANTS.RECORDS_PER_PAGE,
   countBy?: string,
+  search?: string,
 ): Promise<any | undefined> => {
   try {
     const user = await getCurrentUser();
@@ -20,11 +22,17 @@ export const getCompanyList = async (
     }
     const skip = (page - 1) * limit;
 
+    const whereClause: any = {
+      createdBy: user.id,
+    };
+
+    if (search) {
+      whereClause.label = { contains: search };
+    }
+
     const [data, total, rejectedCounts, totalCounts] = await Promise.all([
       prisma.company.findMany({
-        where: {
-          createdBy: user.id,
-        },
+        where: whereClause,
         skip,
         take: limit,
         ...(countBy
@@ -53,9 +61,7 @@ export const getCompanyList = async (
         },
       }),
       prisma.company.count({
-        where: {
-          createdBy: user.id,
-        },
+        where: whereClause,
       }),
       countBy
         ? prisma.job.groupBy({
@@ -161,7 +167,7 @@ export const addCompany = async (
       );
     }
 
-    const value = company.trim().toLowerCase();
+    const value = canonicalizeEntityValue(company.trim(), { stripLegalSuffix: true });
 
     const companyExists = await prisma.company.findFirst({
       where: {
@@ -213,17 +219,37 @@ export const updateCompany = async (
       );
     }
 
-    const value = company.trim().toLowerCase();
-
-    const companyExists = await prisma.company.findFirst({
+    const existingCompany = await prisma.company.findFirst({
       where: {
-        value,
+        id,
         createdBy: user.id,
       },
     });
 
-    if (companyExists && companyExists.id !== id) {
-      throw new Error("Company already exists!");
+    if (!existingCompany) {
+      throw new Error("Company not found");
+    }
+
+    const trimmedLabel = company.trim();
+
+    // Only recompute the match key when the label actually changed. Some
+    // rows (e.g. mock-seeded companies) intentionally hold a `value` that
+    // isn't derivable from their label — recomputing on every save would
+    // collide with an unrelated company sharing the same canonical label.
+    let value = existingCompany.value;
+    if (trimmedLabel !== existingCompany.label) {
+      value = canonicalizeEntityValue(trimmedLabel, { stripLegalSuffix: true });
+
+      const companyExists = await prisma.company.findFirst({
+        where: {
+          value,
+          createdBy: user.id,
+        },
+      });
+
+      if (companyExists && companyExists.id !== id) {
+        throw new Error("Company already exists!");
+      }
     }
 
     const res = await prisma.company.update({

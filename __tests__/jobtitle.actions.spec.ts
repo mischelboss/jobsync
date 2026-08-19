@@ -172,6 +172,43 @@ describe("Job Title Actions", () => {
 
       expect(result).toEqual({ success: false, message: "Database error" });
     });
+
+    it("should filter job titles by label when search is provided", async () => {
+      (getCurrentUser as any).mockResolvedValue(mockUser);
+      const mockData = [
+        { id: "title-1", label: "Developer", value: "developer" },
+      ];
+      (prisma.jobTitle.findMany as any).mockResolvedValue(mockData);
+      (prisma.jobTitle.count as any).mockResolvedValue(1);
+
+      const result = await getJobTitleList(1, 10, undefined, "Dev");
+
+      expect(result).toEqual({ data: mockData, total: 1 });
+      expect(prisma.jobTitle.findMany).toHaveBeenCalledWith({
+        where: { createdBy: mockUser.id, label: { contains: "Dev" } },
+        skip: 0,
+        take: 10,
+        orderBy: { jobs: { _count: "desc" } },
+      });
+      expect(prisma.jobTitle.count).toHaveBeenCalledWith({
+        where: { createdBy: mockUser.id, label: { contains: "Dev" } },
+      });
+    });
+
+    it("should not apply a label filter when search is empty", async () => {
+      (getCurrentUser as any).mockResolvedValue(mockUser);
+      (prisma.jobTitle.findMany as any).mockResolvedValue([]);
+      (prisma.jobTitle.count as any).mockResolvedValue(0);
+
+      await getJobTitleList(1, 10, undefined, "");
+
+      expect(prisma.jobTitle.findMany).toHaveBeenCalledWith({
+        where: { createdBy: mockUser.id },
+        skip: 0,
+        take: 10,
+        orderBy: { jobs: { _count: "desc" } },
+      });
+    });
   });
 
   describe("createJobTitle", () => {
@@ -217,6 +254,34 @@ describe("Job Title Actions", () => {
       const result = await createJobTitle("Developer");
 
       expect(result).toEqual({ success: false, message: "Upsert failed" });
+    });
+    it("should canonicalize the value (not just lowercase) for matching", async () => {
+      // Regression guard: value computation was switched from
+      // label.trim().toLowerCase() to canonicalizeEntityValue(), which also
+      // folds diacritics and comma separators. A plain-ASCII label wouldn't
+      // catch a revert to the old behavior.
+      (getCurrentUser as any).mockResolvedValue(mockUser);
+      (prisma.jobTitle.upsert as any).mockImplementation(({ create }: any) =>
+        Promise.resolve(create),
+      );
+
+      const result = await createJobTitle("Ingénieur Logiciel");
+
+      expect(prisma.jobTitle.upsert).toHaveBeenCalledWith({
+        where: {
+          value_createdBy: {
+            value: "ingenieur logiciel",
+            createdBy: mockUser.id,
+          },
+        },
+        update: { label: "Ingénieur Logiciel" },
+        create: {
+          label: "Ingénieur Logiciel",
+          value: "ingenieur logiciel",
+          createdBy: mockUser.id,
+        },
+      });
+      expect(result.value).toBe("ingenieur logiciel");
     });
   });
 

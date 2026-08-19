@@ -7,6 +7,32 @@ import { getCurrentUser } from "@/utils/user.utils";
 import { APP_CONSTANTS } from "@/lib/constants";
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
+import { differenceInMinutes } from "date-fns";
+
+// One shape for every action that returns the running activity, so the client
+// can never receive a copy missing its break state.
+const RUNNING_ACTIVITY_SELECT = {
+  id: true,
+  activityName: true,
+  startTime: true,
+  endTime: true,
+  description: true,
+  createdAt: true,
+  activityType: true,
+  breakMinutes: true,
+  breakStartedAt: true,
+  breakPlannedMins: true,
+};
+
+const clampBreakMinutes = (minutes: number) =>
+  Math.min(
+    Math.max(minutes, APP_CONSTANTS.ACTIVITY_BREAK_MIN_MINUTES),
+    APP_CONSTANTS.ACTIVITY_BREAK_MAX_MINUTES,
+  );
+
+// Rounded, not floored: repeated short breaks would otherwise be lost entirely.
+const breakMinutesSince = (start: Date, now: Date = new Date()) =>
+  Math.max(0, Math.round((now.getTime() - start.getTime()) / 60000));
 
 export const getAllActivityTypes = async (): Promise<any | undefined> => {
   try {
@@ -226,15 +252,7 @@ export const startActivityById = async (
         endTime: null,
         description,
       },
-      select: {
-        id: true,
-        activityName: true,
-        startTime: true,
-        endTime: true,
-        description: true,
-        createdAt: true,
-        activityType: true,
-      },
+      select: RUNNING_ACTIVITY_SELECT,
     });
     return { newActivity, success: true };
   } catch (error) {
@@ -246,7 +264,6 @@ export const startActivityById = async (
 export const stopActivityById = async (
   activityId: string,
   endTime: Date,
-  duration: number
 ): Promise<any | undefined> => {
   try {
     const user = await getCurrentUser();
@@ -255,18 +272,53 @@ export const stopActivityById = async (
       throw new Error("Not authenticated");
     }
 
-    const activity = await prisma.activity.update({
-      where: {
-        id: activityId,
-        userId: user.id,
-      },
+    // endTime: null — this must never reach an already-saved row, because the
+    // discard branch below deletes.
+    const activity = await prisma.activity.findFirst({
+      where: { id: activityId, userId: user.id, endTime: null },
+    });
+
+    if (!activity) {
+      throw new Error("Activity not found");
+    }
+
+    // Time spent away is never billed as work, even if the user never resumed.
+    const breakMinutes =
+      activity.breakMinutes +
+      (activity.breakStartedAt
+        ? breakMinutesSince(activity.breakStartedAt, endTime)
+        : 0);
+
+    // Subtract before capping: capping first double-penalised anything past 8h
+    // of wall clock and could zero out a real day's work (decision 7).
+    const workedMinutes =
+      differenceInMinutes(endTime, activity.startTime) - breakMinutes;
+    const duration = Math.min(
+      Math.max(workedMinutes, 0),
+      APP_CONSTANTS.ACTIVITY_MAX_DURATION_MINUTES,
+    );
+
+    if (duration < APP_CONSTANTS.ACTIVITY_MIN_DURATION_MINUTES) {
+      await prisma.activity.delete({
+        where: { id: activityId, userId: user.id },
+      });
+      revalidatePath("/dashboard");
+      return { success: true, discarded: true };
+    }
+
+    const stopped = await prisma.activity.update({
+      where: { id: activityId, userId: user.id },
       data: {
         endTime,
         duration,
+        breakMinutes,
+        breakStartedAt: null,
+        breakPlannedMins: null,
       },
     });
+
     revalidatePath("/dashboard");
-    return { activity, success: true };
+    return { activity: stopped, success: true, discarded: false };
   } catch (error) {
     const msg = "Failed to stop activity. ";
     return handleError(error, msg);
@@ -286,14 +338,7 @@ export const getCurrentActivity = async (): Promise<any | undefined> => {
         userId: user.id,
         endTime: null,
       },
-      select: {
-        id: true,
-        activityName: true,
-        startTime: true,
-        description: true,
-        createdAt: true,
-        activityType: true,
-      },
+      select: RUNNING_ACTIVITY_SELECT,
     });
 
     if (!activity) {
@@ -391,6 +436,119 @@ export const deleteActivityTypeById = async (
     return { res, success: true };
   } catch (error) {
     const msg = "Failed to delete activity type.";
+    return handleError(error, msg);
+  }
+};
+
+export const startBreak = async (
+  activityId: string,
+  plannedMinutes: number,
+): Promise<any | undefined> => {
+  try {
+    const user = await getCurrentUser();
+
+    if (!user) {
+      throw new Error("Not authenticated");
+    }
+
+    const activity = await prisma.activity.findFirst({
+      where: { id: activityId, userId: user.id, endTime: null },
+    });
+
+    if (!activity) {
+      throw new Error("Activity not found");
+    }
+
+    if (activity.breakStartedAt) {
+      return { success: false, message: "A break is already in progress." };
+    }
+
+    const updated = await prisma.activity.update({
+      where: { id: activityId, userId: user.id },
+      data: {
+        breakStartedAt: new Date(),
+        breakPlannedMins: clampBreakMinutes(plannedMinutes),
+      },
+      select: RUNNING_ACTIVITY_SELECT,
+    });
+
+    return { activity: updated, success: true };
+  } catch (error) {
+    const msg = "Failed to start break. ";
+    return handleError(error, msg);
+  }
+};
+
+export const endBreak = async (
+  activityId: string,
+): Promise<any | undefined> => {
+  try {
+    const user = await getCurrentUser();
+
+    if (!user) {
+      throw new Error("Not authenticated");
+    }
+
+    const activity = await prisma.activity.findFirst({
+      where: { id: activityId, userId: user.id, endTime: null },
+      select: RUNNING_ACTIVITY_SELECT,
+    });
+
+    if (!activity) {
+      throw new Error("Activity not found");
+    }
+
+    // Resuming twice (two tabs, or a retry) must not double-count.
+    if (!activity.breakStartedAt) {
+      return { activity, success: true };
+    }
+
+    const updated = await prisma.activity.update({
+      where: { id: activityId, userId: user.id },
+      data: {
+        breakMinutes:
+          activity.breakMinutes + breakMinutesSince(activity.breakStartedAt),
+        breakStartedAt: null,
+        breakPlannedMins: null,
+      },
+      select: RUNNING_ACTIVITY_SELECT,
+    });
+
+    return { activity: updated, success: true };
+  } catch (error) {
+    const msg = "Failed to end break. ";
+    return handleError(error, msg);
+  }
+};
+
+export const updateBreakLength = async (
+  activityId: string,
+  plannedMinutes: number,
+): Promise<any | undefined> => {
+  try {
+    const user = await getCurrentUser();
+
+    if (!user) {
+      throw new Error("Not authenticated");
+    }
+
+    const activity = await prisma.activity.findFirst({
+      where: { id: activityId, userId: user.id, endTime: null },
+    });
+
+    if (!activity?.breakStartedAt) {
+      return { success: false, message: "No break is in progress." };
+    }
+
+    const updated = await prisma.activity.update({
+      where: { id: activityId, userId: user.id },
+      data: { breakPlannedMins: clampBreakMinutes(plannedMinutes) },
+      select: RUNNING_ACTIVITY_SELECT,
+    });
+
+    return { activity: updated, success: true };
+  } catch (error) {
+    const msg = "Failed to update break length. ";
     return handleError(error, msg);
   }
 };

@@ -3,6 +3,7 @@ import TasksContainer from "@/components/tasks/TasksContainer";
 import TasksSidebar from "@/components/tasks/TasksSidebar";
 import { ActivityType } from "@/models/activity.model";
 import { useState, useCallback } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { getActivityTypesWithTaskCounts } from "@/actions/task.actions";
 
 type ActivityTypeWithCount = {
@@ -23,13 +24,29 @@ function TasksPageClient({
   activityTypesWithCounts,
   totalTasks,
 }: TasksPageClientProps) {
-  const [filterKey, setFilterKey] = useState<string | undefined>(undefined);
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  const [filterKey, setFilterKey] = useState<string | undefined>(
+    searchParams.get("activityType") ?? undefined,
+  );
   const [sidebarCounts, setSidebarCounts] =
     useState<ActivityTypeWithCount[]>(activityTypesWithCounts);
   const [sidebarTotal, setSidebarTotal] = useState<number>(totalTasks);
 
   const onFilterChange = (filter: string | undefined) => {
     setFilterKey(filter);
+    const params = new URLSearchParams(searchParams.toString());
+    if (filter) {
+      params.set("activityType", filter);
+    } else {
+      params.delete("activityType");
+    }
+    const query = params.toString();
+    router.replace(query ? `${pathname}?${query}` : pathname, {
+      scroll: false,
+    });
   };
 
   const refreshSidebarCounts = useCallback(async () => {

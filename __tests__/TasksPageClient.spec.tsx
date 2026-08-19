@@ -2,6 +2,7 @@ import TasksPageClient from "@/app/dashboard/tasks/TasksPageClient";
 import { screen, render, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { getTasksList } from "@/actions/task.actions";
+import { useRouter, useSearchParams } from "next/navigation";
 
 vi.mock("next-auth", () => {
   const mockAuth = vi.fn();
@@ -46,6 +47,8 @@ vi.mock("next/navigation", () => ({
     replace: vi.fn(),
     prefetch: vi.fn(),
   }),
+  usePathname: vi.fn().mockReturnValue("/dashboard/tasks"),
+  useSearchParams: vi.fn().mockReturnValue(new URLSearchParams()),
 }));
 
 vi.mock("@/context/ActivityContext", () => ({
@@ -131,6 +134,7 @@ describe("TasksPageClient Component", () => {
       data: [],
       total: 0,
     });
+    (useSearchParams as any).mockReturnValue(new URLSearchParams());
   });
 
   describe("Rendering", () => {
@@ -385,7 +389,8 @@ describe("TasksPageClient Component", () => {
           25,
           "type-1",
           expect.any(Array),
-          undefined
+          undefined,
+          "none"
         );
       });
     });
@@ -417,7 +422,8 @@ describe("TasksPageClient Component", () => {
           25,
           "type-1",
           expect.any(Array),
-          undefined
+          undefined,
+          "none"
         );
       });
 
@@ -434,7 +440,8 @@ describe("TasksPageClient Component", () => {
           25,
           undefined,
           expect.any(Array),
-          undefined
+          undefined,
+          "none"
         );
       });
     });
@@ -566,6 +573,75 @@ describe("TasksPageClient Component", () => {
 
       await waitFor(() => {
         expect(codeReviewButton).toHaveClass("bg-accent");
+      });
+    });
+  });
+
+  describe("URL Persistence", () => {
+    it("should initialize the selected filter from the activityType URL param", () => {
+      (useSearchParams as any).mockReturnValue(
+        new URLSearchParams("activityType=type-1")
+      );
+
+      render(
+        <TasksPageClient
+          activityTypes={mockActivityTypes}
+          activityTypesWithCounts={mockActivityTypesWithCounts}
+          totalTasks={8}
+        />
+      );
+
+      const developmentButton = screen.getByRole("button", {
+        name: /Development/i,
+      });
+      expect(developmentButton).toHaveClass("bg-accent");
+    });
+
+    it("should write the selected activity type to the URL", async () => {
+      const routerMock = (useRouter as any)();
+
+      render(
+        <TasksPageClient
+          activityTypes={mockActivityTypes}
+          activityTypesWithCounts={mockActivityTypesWithCounts}
+          totalTasks={8}
+        />
+      );
+
+      const developmentButton = screen.getByRole("button", {
+        name: /Development/i,
+      });
+      await user.click(developmentButton);
+
+      await waitFor(() => {
+        expect(routerMock.replace).toHaveBeenCalledWith(
+          "/dashboard/tasks?activityType=type-1",
+          { scroll: false }
+        );
+      });
+    });
+
+    it("should remove the activityType param from the URL when All is clicked", async () => {
+      (useSearchParams as any).mockReturnValue(
+        new URLSearchParams("activityType=type-1")
+      );
+      const routerMock = (useRouter as any)();
+
+      render(
+        <TasksPageClient
+          activityTypes={mockActivityTypes}
+          activityTypesWithCounts={mockActivityTypesWithCounts}
+          totalTasks={8}
+        />
+      );
+
+      const allButton = screen.getByRole("button", { name: /All/i });
+      await user.click(allButton);
+
+      await waitFor(() => {
+        expect(routerMock.replace).toHaveBeenCalledWith("/dashboard/tasks", {
+          scroll: false,
+        });
       });
     });
   });

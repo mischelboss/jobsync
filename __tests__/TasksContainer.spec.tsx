@@ -1,5 +1,5 @@
 import TasksContainer from "@/components/tasks/TasksContainer";
-import { screen, render, waitFor } from "@testing-library/react";
+import { screen, render, waitFor, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import {
   getTasksList,
@@ -7,6 +7,7 @@ import {
   deleteTaskById,
   updateTaskStatus,
   startActivityFromTask,
+  createTask,
 } from "@/actions/task.actions";
 import { Task } from "@/models/task.model";
 import { useRouter } from "next/navigation";
@@ -48,10 +49,13 @@ vi.mock("@/actions/task.actions", () => ({
   deleteTaskById: vi.fn(),
   updateTaskStatus: vi.fn(),
   startActivityFromTask: vi.fn(),
+  createTask: vi.fn(),
+  updateTask: vi.fn(),
 }));
 
 vi.mock("next/navigation", () => ({
   useRouter: vi.fn(),
+  useSearchParams: vi.fn(() => new URLSearchParams()),
 }));
 
 vi.mock("@/context/ActivityContext", () => ({
@@ -199,7 +203,7 @@ describe("TasksContainer Component", () => {
         expect(getTasksList).toHaveBeenCalledWith(1, 25, undefined, [
           "in-progress",
           "needs-attention",
-        ], undefined);
+        ], undefined, "none");
       });
 
       await waitFor(() => {
@@ -470,10 +474,15 @@ describe("TasksContainer Component", () => {
       const startActivityButtons = screen.getAllByTestId(/start-activity-/);
       await user.click(startActivityButtons[0]);
 
+      // A rejected start resyncs the per-user running activity, but with
+      // nothing running it must not offer to switch.
       await waitFor(() => {
         expect(startActivityFromTask).toHaveBeenCalledWith("task-1");
-        expect(mockRefreshCurrentActivity).not.toHaveBeenCalled();
+        expect(mockRefreshCurrentActivity).toHaveBeenCalledTimes(1);
       });
+      expect(
+        screen.queryByText(/Stop current activity and start a new one/i),
+      ).not.toBeInTheDocument();
     });
   });
 
@@ -557,6 +566,127 @@ describe("TasksContainer Component", () => {
     });
   });
 
+  describe("Save & Start from the Add Task dialog", () => {
+    beforeEach(() => {
+      (getTasksList as any).mockResolvedValue({
+        success: true,
+        data: mockTasks,
+        total: 2,
+      });
+    });
+
+    const openAddTaskDialogAndFillForm = async () => {
+      const addButton = screen.getByTestId("add-task-btn");
+      await user.click(addButton);
+
+      await screen.findByTestId("task-form-dialog-title");
+
+      const titleInput = screen.getByLabelText(/Title/i);
+      await user.type(titleInput, "Brand New Task");
+
+      const activityTypeCombobox = screen.getByLabelText(/Activity Type/i);
+      await user.click(activityTypeCombobox);
+      const developmentOption = screen.getByRole("option", {
+        name: "Development",
+      });
+      await user.click(developmentOption);
+    };
+
+    it("creates the task and starts its activity when nothing is in progress", async () => {
+      (createTask as any).mockResolvedValue({
+        success: true,
+        data: { id: "new-task-id" },
+      });
+      (startActivityFromTask as any).mockResolvedValue({ success: true });
+
+      render(<TasksContainer activityTypes={mockActivityTypes} />);
+
+      await waitFor(() => {
+        expect(screen.getByText("Task 1")).toBeInTheDocument();
+      });
+
+      await openAddTaskDialogAndFillForm();
+
+      const saveAndStartBtn = screen.getByTestId("save-and-start-task-btn");
+      await user.click(saveAndStartBtn);
+
+      await waitFor(() => {
+        expect(createTask).toHaveBeenCalledTimes(1);
+        expect(startActivityFromTask).toHaveBeenCalledWith("new-task-id");
+        expect(mockRefreshCurrentActivity).toHaveBeenCalled();
+      });
+      expect(
+        screen.queryByTestId("task-form-dialog-title")
+      ).not.toBeInTheDocument();
+    });
+
+    it("shows the confirm dialog instead of starting immediately when an activity is already running", async () => {
+      const mockStopActivity = vi.fn();
+      (useActivity as any).mockReturnValue({
+        refreshCurrentActivity: mockRefreshCurrentActivity,
+        currentActivity: { id: "current-1", activityName: "Ongoing Task" },
+        stopActivity: mockStopActivity,
+      });
+      (createTask as any).mockResolvedValue({
+        success: true,
+        data: { id: "new-task-id" },
+      });
+
+      render(<TasksContainer activityTypes={mockActivityTypes} />);
+
+      await waitFor(() => {
+        expect(screen.getByText("Task 1")).toBeInTheDocument();
+      });
+
+      await openAddTaskDialogAndFillForm();
+
+      const saveAndStartBtn = screen.getByTestId("save-and-start-task-btn");
+      await user.click(saveAndStartBtn);
+
+      await waitFor(() => {
+        expect(createTask).toHaveBeenCalledTimes(1);
+      });
+      expect(startActivityFromTask).not.toHaveBeenCalled();
+      expect(
+        await screen.findByText(/"Ongoing Task" is currently in progress/i)
+      ).toBeInTheDocument();
+
+      (startActivityFromTask as any).mockResolvedValue({ success: true });
+      const confirmButton = screen.getByRole("button", {
+        name: "Stop & Start",
+      });
+      await user.click(confirmButton);
+
+      await waitFor(() => {
+        expect(mockStopActivity).toHaveBeenCalledTimes(1);
+        expect(startActivityFromTask).toHaveBeenCalledWith("new-task-id");
+      });
+    });
+
+    it("does not start an activity when task creation fails", async () => {
+      (createTask as any).mockResolvedValue({
+        success: false,
+        message: "Failed to create task",
+      });
+
+      render(<TasksContainer activityTypes={mockActivityTypes} />);
+
+      await waitFor(() => {
+        expect(screen.getByText("Task 1")).toBeInTheDocument();
+      });
+
+      await openAddTaskDialogAndFillForm();
+
+      const saveAndStartBtn = screen.getByTestId("save-and-start-task-btn");
+      await user.click(saveAndStartBtn);
+
+      await waitFor(() => {
+        expect(createTask).toHaveBeenCalledTimes(1);
+      });
+      expect(startActivityFromTask).not.toHaveBeenCalled();
+    });
+  });
+
   describe("Filtering and Grouping", () => {
     beforeEach(async () => {
       (getTasksList as any).mockResolvedValue({
@@ -579,7 +709,7 @@ describe("TasksContainer Component", () => {
         expect(getTasksList).toHaveBeenCalledWith(1, 25, "type-1", [
           "in-progress",
           "needs-attention",
-        ], undefined);
+        ], undefined, "none");
       });
     });
 
@@ -597,7 +727,7 @@ describe("TasksContainer Component", () => {
       await waitFor(() => {
         expect(getTasksList).toHaveBeenCalledWith(1, 25, "type-1", [
           "needs-attention",
-        ], undefined);
+        ], undefined, "none");
       });
     });
 
@@ -610,6 +740,13 @@ describe("TasksContainer Component", () => {
 
       await waitFor(() => {
         expect(groupBySelect).toHaveTextContent("Due Date");
+      });
+
+      await waitFor(() => {
+        expect(getTasksList).toHaveBeenLastCalledWith(1, 25, "type-1", [
+          "in-progress",
+          "needs-attention",
+        ], undefined, "dueDate");
       });
     });
   });
@@ -656,16 +793,18 @@ describe("TasksContainer Component", () => {
       });
 
       // Simulate sentinel becoming visible
-      intersectionCallback(
-        [{ isIntersecting: true }] as IntersectionObserverEntry[],
-        {} as IntersectionObserver,
-      );
+      await act(async () => {
+        intersectionCallback(
+          [{ isIntersecting: true }] as IntersectionObserverEntry[],
+          {} as IntersectionObserver,
+        );
+      });
 
       await waitFor(() => {
         expect(getTasksList).toHaveBeenCalledWith(2, 25, undefined, [
           "in-progress",
           "needs-attention",
-        ], undefined);
+        ], undefined, "none");
       });
     });
 
@@ -782,7 +921,8 @@ describe("TasksContainer Component", () => {
           25,
           undefined,
           ["in-progress", "needs-attention"],
-          undefined
+          undefined,
+          "none"
         );
       });
 
@@ -798,7 +938,9 @@ describe("TasksContainer Component", () => {
       expect(getTasksList).not.toHaveBeenCalled();
 
       // Fast-forward past the 300ms debounce
-      vi.advanceTimersByTime(300);
+      await act(async () => {
+        vi.advanceTimersByTime(300);
+      });
 
       await waitFor(() => {
         expect(getTasksList).toHaveBeenCalledWith(
@@ -806,7 +948,8 @@ describe("TasksContainer Component", () => {
           25,
           undefined,
           ["in-progress", "needs-attention"],
-          "Task 1"
+          "Task 1",
+          "none"
         );
       });
     });
@@ -839,7 +982,9 @@ describe("TasksContainer Component", () => {
         "Task 1"
       );
 
-      vi.advanceTimersByTime(300);
+      await act(async () => {
+        vi.advanceTimersByTime(300);
+      });
 
       await waitFor(() => {
         expect(screen.getByText("Task 1")).toBeInTheDocument();
@@ -872,7 +1017,9 @@ describe("TasksContainer Component", () => {
         "nonexistent"
       );
 
-      vi.advanceTimersByTime(300);
+      await act(async () => {
+        vi.advanceTimersByTime(300);
+      });
 
       await waitFor(() => {
         expect(screen.getByText(/No tasks found/i)).toBeInTheDocument();
@@ -911,7 +1058,8 @@ describe("TasksContainer Component", () => {
           25,
           undefined,
           ["needs-attention"],
-          undefined
+          undefined,
+          "none"
         );
       });
 
@@ -924,7 +1072,9 @@ describe("TasksContainer Component", () => {
         "Task"
       );
 
-      vi.advanceTimersByTime(300);
+      await act(async () => {
+        vi.advanceTimersByTime(300);
+      });
 
       await waitFor(() => {
         expect(getTasksList).toHaveBeenCalledWith(
@@ -932,7 +1082,8 @@ describe("TasksContainer Component", () => {
           25,
           undefined,
           ["needs-attention"],
-          "Task"
+          "Task",
+          "none"
         );
       });
     });
@@ -954,7 +1105,8 @@ describe("TasksContainer Component", () => {
           25,
           "type-1",
           ["in-progress", "needs-attention"],
-          undefined
+          undefined,
+          "none"
         );
       });
 
@@ -966,7 +1118,9 @@ describe("TasksContainer Component", () => {
         "Development"
       );
 
-      vi.advanceTimersByTime(300);
+      await act(async () => {
+        vi.advanceTimersByTime(300);
+      });
 
       await waitFor(() => {
         expect(getTasksList).toHaveBeenCalledWith(
@@ -974,7 +1128,8 @@ describe("TasksContainer Component", () => {
           25,
           "type-1",
           ["in-progress", "needs-attention"],
-          "Development"
+          "Development",
+          "none"
         );
       });
     });
@@ -1010,7 +1165,9 @@ describe("TasksContainer Component", () => {
         "Task"
       );
 
-      vi.advanceTimersByTime(300);
+      await act(async () => {
+        vi.advanceTimersByTime(300);
+      });
 
       await waitFor(() => {
         expect(getTasksList).toHaveBeenCalledWith(
@@ -1018,17 +1175,20 @@ describe("TasksContainer Component", () => {
           25,
           undefined,
           ["in-progress", "needs-attention"],
-          "Task"
+          "Task",
+          "none"
         );
       });
 
       vi.clearAllMocks();
 
       // Simulate sentinel becoming visible
-      intersectionCallback(
-        [{ isIntersecting: true }] as IntersectionObserverEntry[],
-        {} as IntersectionObserver,
-      );
+      await act(async () => {
+        intersectionCallback(
+          [{ isIntersecting: true }] as IntersectionObserverEntry[],
+          {} as IntersectionObserver,
+        );
+      });
 
       await waitFor(() => {
         expect(getTasksList).toHaveBeenCalledWith(
@@ -1036,7 +1196,8 @@ describe("TasksContainer Component", () => {
           25,
           undefined,
           ["in-progress", "needs-attention"],
-          "Task"
+          "Task",
+          "none"
         );
       });
     });
@@ -1062,7 +1223,9 @@ describe("TasksContainer Component", () => {
         "first search"
       );
 
-      vi.advanceTimersByTime(300);
+      await act(async () => {
+        vi.advanceTimersByTime(300);
+      });
 
       await waitFor(() => {
         expect(getTasksList).toHaveBeenCalledWith(
@@ -1070,7 +1233,8 @@ describe("TasksContainer Component", () => {
           25,
           undefined,
           ["in-progress", "needs-attention"],
-          "first search"
+          "first search",
+          "none"
         );
       });
 
@@ -1085,7 +1249,9 @@ describe("TasksContainer Component", () => {
         "second search"
       );
 
-      vi.advanceTimersByTime(300);
+      await act(async () => {
+        vi.advanceTimersByTime(300);
+      });
 
       await waitFor(() => {
         expect(getTasksList).toHaveBeenCalledWith(
@@ -1093,7 +1259,8 @@ describe("TasksContainer Component", () => {
           25,
           undefined,
           ["in-progress", "needs-attention"],
-          "second search"
+          "second search",
+          "none"
         );
       });
     });
@@ -1123,7 +1290,9 @@ describe("TasksContainer Component", () => {
       await typingUser.type(searchInput, "Task");
 
       // Only after full debounce should API be called
-      vi.advanceTimersByTime(300);
+      await act(async () => {
+        vi.advanceTimersByTime(300);
+      });
 
       await waitFor(() => {
         expect(getTasksList).toHaveBeenLastCalledWith(
@@ -1131,7 +1300,8 @@ describe("TasksContainer Component", () => {
           25,
           undefined,
           ["in-progress", "needs-attention"],
-          "Task"
+          "Task",
+          "none"
         );
       });
     });
@@ -1163,7 +1333,9 @@ describe("TasksContainer Component", () => {
         "Task"
       );
 
-      vi.advanceTimersByTime(300);
+      await act(async () => {
+        vi.advanceTimersByTime(300);
+      });
 
       await waitFor(() => {
         expect(getTasksList).toHaveBeenCalledWith(
@@ -1171,7 +1343,8 @@ describe("TasksContainer Component", () => {
           25,
           undefined,
           ["in-progress", "needs-attention"],
-          "Task"
+          "Task",
+          "none"
         );
       });
 

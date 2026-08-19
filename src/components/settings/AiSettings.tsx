@@ -23,7 +23,7 @@ import {
 import { Label } from "../ui/label";
 import { Button } from "../ui/button";
 import { Switch } from "../ui/switch";
-import { toast } from "../ui/use-toast";
+import { toastSuccess, toastError } from "@/lib/toast";
 import { XCircle, Loader2, RefreshCw } from "lucide-react";
 import { checkOllamaConnection } from "@/utils/ai.utils";
 import {
@@ -185,11 +185,7 @@ function AiSettings() {
 
   const saveModelSettings = async () => {
     if (!selectedModel.model) {
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "Please select a model to save.",
-      });
+      toastError("Please select a model to save.");
       return;
     }
     setIsSaving(true);
@@ -199,25 +195,13 @@ function AiSettings() {
         model: selectedModel.model,
       });
       if (result.success) {
-        toast({
-          variant: "success",
-          title: "Saved!",
-          description: "AI Settings saved successfully.",
-        });
+        toastSuccess("AI Settings saved successfully.", "Saved!");
       } else {
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: result.message || "Failed to save AI settings.",
-        });
+        toastError(result.message || "Failed to save AI settings.");
       }
     } catch (error) {
       console.error("Error saving AI settings:", error);
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "Failed to save AI settings.",
-      });
+      toastError("Failed to save AI settings.");
     } finally {
       setIsSaving(false);
     }
@@ -231,27 +215,18 @@ function AiSettings() {
         enableProcessResearch: checked,
       });
       if (result?.success) {
-        toast({
-          variant: "success",
-          title: "Saved!",
-          description: `Interview-process research ${checked ? "enabled" : "disabled"}.`,
-        });
+        toastSuccess(
+          `Interview-process research ${checked ? "enabled" : "disabled"}.`,
+          "Saved!",
+        );
       } else {
         setEnableProcessResearch(!checked); // revert
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: result?.message || "Failed to save research settings.",
-        });
+        toastError(result?.message || "Failed to save research settings.");
       }
     } catch (error) {
       console.error("Error saving research settings:", error);
       setEnableProcessResearch(!checked); // revert
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "Failed to save research settings.",
-      });
+      toastError("Failed to save research settings.");
     } finally {
       setIsSavingResearch(false);
     }
@@ -302,7 +277,7 @@ function AiSettings() {
               {AI_PROVIDERS.map((id) => {
                 const entry = PROVIDER_REGISTRY[id];
                 return (
-                  <SelectItem key={id} value={id} className="capitalize">
+                  <SelectItem key={id} value={id}>
                     {entry.displayName}
                   </SelectItem>
                 );
@@ -315,7 +290,7 @@ function AiSettings() {
         <Label className="my-4" htmlFor="ai-model">
           Model
         </Label>
-        <div className="flex items-start gap-2">
+        <div className="flex flex-wrap items-start gap-2">
           <Select
             value={isLoadingModels ? undefined : selectedModel.model}
             onValueChange={setSelectedProviderModel}
@@ -335,7 +310,7 @@ function AiSettings() {
             <SelectContent>
               <SelectGroup>
                 {fetchedModels.map((model) => (
-                  <SelectItem key={model} value={model} className="capitalize">
+                  <SelectItem key={model} value={model}>
                     {model}
                   </SelectItem>
                 ))}
@@ -343,25 +318,25 @@ function AiSettings() {
             </SelectContent>
           </Select>
           {fetchError && (
-            <div className="flex items-center gap-1 text-red-600 text-sm mt-2">
-              <XCircle className="h-4 w-4 flex-shrink-0" />
+            <div className="flex items-start gap-1 text-red-600 text-sm mt-2">
+              <XCircle className="h-4 w-4 shrink-0 mt-0.5" />
               <span>{fetchError}</span>
             </div>
           )}
           {connectionError && (
-            <div className="flex items-center gap-1 mt-2">
+            <div className="flex items-start gap-2 mt-2">
               <Button
                 variant="outline"
                 size="sm"
-                className="h-6 flex-shrink-0 text-muted-foreground"
+                className="h-6 shrink-0 text-muted-foreground"
                 onClick={retryConnection}
                 disabled={isLoadingModels}
               >
                 <RefreshCw className={`h-3.5 w-3.5 ${isLoadingModels ? "animate-spin" : ""}`} />
                 Retry
               </Button>
-              <div className="flex items-center gap-1 text-red-600 text-sm">
-                <XCircle className="h-4 w-4 flex-shrink-0" />
+              <div className="flex items-start gap-1 text-red-600 text-sm">
+                <XCircle className="h-4 w-4 shrink-0 mt-0.5" />
                 <span>{connectionError}</span>
               </div>
             </div>

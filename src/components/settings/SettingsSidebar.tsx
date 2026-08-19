@@ -1,6 +1,6 @@
 "use client";
 
-import { Bot, FileText, Key, Mail, Palette, Plug } from "lucide-react";
+import { Bot, Database, FileText, Key, Mail, Palette, Plug } from "lucide-react";
 import { Button } from "../ui/button";
 import { cn } from "@/lib/utils";
 
@@ -10,7 +10,8 @@ export type SettingsSection =
   | "prompt-library"
   | "email-mailbox"
   | "appearance"
-  | "mcp-access";
+  | "mcp-access"
+  | "data";
 
 const SETTINGS_SECTIONS: {
   id: SettingsSection;
@@ -23,6 +24,7 @@ const SETTINGS_SECTIONS: {
   { id: "email-mailbox", label: "Email Mailbox", icon: Mail },
   { id: "appearance", label: "Appearance", icon: Palette },
   { id: "mcp-access", label: "MCP Access", icon: Plug },
+  { id: "data", label: "Data", icon: Database },
 ];
 
 interface SettingsSidebarProps {
