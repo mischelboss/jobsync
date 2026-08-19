@@ -15,7 +15,7 @@ import { RadioGroup, RadioGroupItem } from "../ui/radio-group";
 import { Label } from "../ui/label";
 import { Badge } from "../ui/badge";
 import { Switch } from "../ui/switch";
-import { toast } from "../ui/use-toast";
+import { toastSuccess, toastError, toastInfo } from "@/lib/toast";
 import { Company, JobLocation, JobTitle } from "@/models/job.model";
 import { Resume, SectionType } from "@/models/profile.model";
 import { CvEducationImport, CvWorkExperienceImport } from "@/models/ai.schemas";
@@ -414,20 +414,18 @@ function ResolveCvEntities({
       }
 
       if (experienceCount || educationCount) {
-        toast({
-          variant: "success",
-          description: `Added ${experienceCount} work experience${experienceCount === 1 ? "" : "s"} and ${educationCount} education entr${educationCount === 1 ? "y" : "ies"}.`,
-        });
+        toastSuccess(
+          `Added ${experienceCount} work experience${experienceCount === 1 ? "" : "s"} and ${educationCount} education entr${educationCount === 1 ? "y" : "ies"}.`,
+        );
       }
       if (errors.length) {
-        toast({
-          variant: "destructive",
-          title: errors.length === 1 ? "One entry needs attention" : `${errors.length} entries need attention`,
-          description: errors.slice(0, 3).join(" "),
-        });
+        toastError(
+          errors.slice(0, 3).join(" "),
+          errors.length === 1 ? "One entry needs attention" : `${errors.length} entries need attention`,
+        );
       }
       if (!experienceCount && !educationCount && !errors.length) {
-        toast({ description: "No entries selected to import." });
+        toastInfo("No entries selected to import.");
       }
 
       onDone();

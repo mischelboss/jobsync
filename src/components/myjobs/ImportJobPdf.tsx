@@ -3,7 +3,7 @@
 import { ChangeEvent, useRef, useState } from "react";
 import { FileUp, Loader } from "lucide-react";
 import { Button } from "../ui/button";
-import { toast } from "../ui/use-toast";
+import { toastSuccess, toastError } from "@/lib/toast";
 import { AiModel, defaultModel } from "@/models/ai.model";
 import { getUserSettings } from "@/actions/userSettings.actions";
 import { JobImportData } from "@/models/job.model";
@@ -55,17 +55,11 @@ export function ImportJobPdf({ onImported }: ImportJobPdfProps) {
       }
 
       onImported(body.data as JobImportData);
-      toast({
-        variant: "success",
-        description: "Job details imported. Review and save.",
-      });
+      toastSuccess("Job details imported. Review and save.");
     } catch (error) {
-      toast({
-        variant: "destructive",
-        title: "Error!",
-        description:
-          error instanceof Error ? error.message : "Unknown error occurred.",
-      });
+      toastError(
+        error instanceof Error ? error.message : "Unknown error occurred.",
+      );
     } finally {
       setIsImporting(false);
     }

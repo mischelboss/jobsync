@@ -18,7 +18,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "../ui/accordion";
-import { toast } from "../ui/use-toast";
+import { toastSuccess, toastError } from "@/lib/toast";
 import { APP_CONSTANTS } from "@/lib/constants";
 import {
   generateInterviewPrep,
@@ -78,13 +78,9 @@ export const InterviewPrepSection = ({ jobId, open }: Props) => {
       if (res?.success) {
         setData(res.data as InterviewPrepData);
         setAdded(new Set());
-        toast({ variant: "success", description: "Interview prep generated." });
+        toastSuccess("Interview prep generated.");
       } else {
-        toast({
-          variant: "destructive",
-          title: "Error!",
-          description: res?.message ?? "Failed to generate interview prep.",
-        });
+        toastError(res?.message ?? "Failed to generate interview prep.");
       }
     } finally {
       setLoading(false);
@@ -106,13 +102,9 @@ export const InterviewPrepSection = ({ jobId, open }: Props) => {
         const res = await createQuestion({ question: q.question, answer });
         if (res?.success) {
           setAdded((prev) => new Set(prev).add(key));
-          toast({ variant: "success", description: "Added to Question Bank." });
+          toastSuccess("Added to Question Bank.");
         } else {
-          toast({
-            variant: "destructive",
-            title: "Error!",
-            description: res?.message ?? "Could not add to Question Bank.",
-          });
+          toastError(res?.message ?? "Could not add to Question Bank.");
         }
       } finally {
         setAddingKey(null);

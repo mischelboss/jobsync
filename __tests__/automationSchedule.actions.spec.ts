@@ -37,6 +37,7 @@ const RESUME_ID = "11111111-1111-4111-8111-111111111111";
 function baseInput(overrides: Record<string, unknown> = {}) {
   return {
     name: "Test Automation",
+    sourceType: "jobboard",
     jobBoard: "jsearch",
     keywords: "engineer",
     location: "New York",
