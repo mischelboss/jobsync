@@ -6,11 +6,13 @@ import { GetResumeResult } from "./GetResumeResult";
 import { ReviewResumeResult } from "./ReviewResumeResult";
 import { MatchJobResult } from "./MatchJobResult";
 import { CoverLetterResult } from "./CoverLetterResult";
+import { InterviewPrepResult } from "./InterviewPrepResult";
 import type {
   AgentAddJobResult,
   AgentCoverLetterResult,
   AgentGetResumeResult,
   AgentMatchJobResult,
+  AgentPrepareInterviewResult,
   AgentReviewResumeResult,
 } from "@/models/agent.model";
 
@@ -48,6 +50,10 @@ export function AgentResultCard({ part }: { part: ToolUIPart }) {
       <MatchJobResult output={part.output as AgentMatchJobResult} />
     ) : toolName === "generate_cover_letter" ? (
       <CoverLetterResult output={part.output as AgentCoverLetterResult} />
+    ) : toolName === "prepare_interview" ? (
+      <InterviewPrepResult
+        output={part.output as AgentPrepareInterviewResult}
+      />
     ) : null;
 
   return <div className="rounded-sm border p-3">{body}</div>;

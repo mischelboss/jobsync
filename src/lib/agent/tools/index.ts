@@ -6,8 +6,9 @@ import { buildGetResumeTool } from "./getResume";
 import { buildReviewResumeTool } from "./reviewResume";
 import { buildMatchJobTool } from "./matchJob";
 import { buildGenerateCoverLetterTool } from "./generateCoverLetter";
+import { buildPrepareInterviewTool } from "./prepareInterview";
 
-// The three nested tools deliberately break the "a tool touches neither the
+// The four nested tools deliberately break the "a tool touches neither the
 // route nor provider resolution" rule in CLAUDE.md: they run their own
 // generation, so they need the resolved model and the stream writer. Recorded
 // in docs/architecture/agent-chat.md rather than contorted around.
@@ -54,6 +55,15 @@ export function buildAgentTools(ctx: {
       writer: ctx.writer,
       guard: nestedGuard,
     }),
+    // No writer: this one generates an object, not a token stream.
+    prepare_interview: buildPrepareInterviewTool({
+      userId: ctx.userId,
+      pageJobId: ctx.pageContext?.jobId,
+      model: ctx.model,
+      provider: ctx.provider,
+      modelName: ctx.modelName,
+      guard: nestedGuard,
+    }),
   };
 }
 
@@ -63,4 +73,5 @@ export {
   buildReviewResumeTool,
   buildMatchJobTool,
   buildGenerateCoverLetterTool,
+  buildPrepareInterviewTool,
 };
