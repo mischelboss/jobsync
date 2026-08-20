@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { format } from "date-fns";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -22,11 +23,12 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { toastSuccess, toastError } from "@/lib/toast";
+import { toastSuccess, toastError, toastInfo } from "@/lib/toast";
 import {
   MoreVertical,
   Pause,
   Play,
+  PlayCircle,
   Pencil,
   Trash2,
   Clock,
@@ -58,6 +60,36 @@ export function AutomationList({
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [loadingAction, setLoadingAction] = useState<string | null>(null);
+  const router = useRouter();
+
+  // The detail page owns the live log SSE, the abort button and the run
+  // watcher. Rather than duplicate that machinery per row, this kicks the run
+  // off and sends the user where they can actually watch it.
+  const handleRunNow = async (id: string) => {
+    setLoadingAction(id);
+    try {
+      const response = await fetch(`/api/automations/${id}/run`, {
+        method: "POST",
+      });
+      const data = await response.json();
+
+      // 409 means a run is genuinely active already — sending them to the
+      // detail page is still the right move, since that is where it is shown.
+      if (response.ok && data.success) {
+        toastSuccess("Run started");
+      } else if (response.status === 409) {
+        toastInfo("This automation is already running.");
+      } else {
+        toastError(data.message || "Failed to start run");
+        return;
+      }
+      router.push(`/dashboard/automations/${id}`);
+    } catch {
+      toastError("Failed to start run");
+    } finally {
+      setLoadingAction(null);
+    }
+  };
 
   const handlePause = async (id: string) => {
     setLoadingAction(id);
@@ -290,6 +322,14 @@ export function AutomationList({
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
+                  <DropdownMenuItem
+                    onClick={() => handleRunNow(automation.id)}
+                    disabled={resumeMissing}
+                  >
+                    <PlayCircle className="h-4 w-4 mr-2" />
+                    Run now
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
                   {automation.status === "active" ? (
                     <DropdownMenuItem
                       onClick={() => handlePause(automation.id)}
