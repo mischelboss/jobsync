@@ -1,6 +1,7 @@
 import "server-only";
 
 import { generateObject, type LanguageModel } from "ai";
+import { repairJsonText } from "@/lib/ai/repair-json";
 
 import db from "@/lib/db";
 import { resolvePromptPair } from "@/lib/ai/prompts/resolve";
@@ -92,6 +93,15 @@ export async function getCompanyContext(
       system,
       prompt,
       temperature: TEMPERATURES.ANALYSIS,
+      // Some OpenRouter models ignore the JSON response format and answer with
+      // a ```json fence; this runs only after the SDK's own parse fails.
+      experimental_repairText: repairJsonText,
+      providerOptions: {
+        // OpenAI and OpenRouter share a factory and default to strict
+        // json_schema, which rejects schemas whose `required` omits an
+        // optional key. Non-strict passes the schema as guidance instead.
+        openai: { strictJsonSchema: false },
+      },
     });
 
     await db.companyResearch.upsert({
