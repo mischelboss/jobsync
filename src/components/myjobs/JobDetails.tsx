@@ -216,7 +216,11 @@ function JobDetails({
             size="sm"
             variant="outline"
             className="h-8 gap-1 cursor-pointer"
-            onClick={() => setInterviewPrepOpen((prev) => !prev)}
+            data-testid="prepare-interview-btn"
+            onClick={() => {
+              setInterviewPrepOpen(true);
+              requestChat(`Prepare me for an interview for ${jobLabel}`);
+            }}
           >
             <MessagesSquare className="h-3.5 w-3.5" />
             <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">
