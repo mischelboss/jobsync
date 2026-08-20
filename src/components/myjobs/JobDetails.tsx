@@ -26,6 +26,7 @@ import { Button } from "../ui/button";
 import {
   ArrowLeft,
   FileText,
+  ScrollText,
   MessagesSquare,
   MoreVertical,
   Pencil,
@@ -37,6 +38,8 @@ import {
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { InterviewPrepSection } from "./InterviewPrepSection";
+import { JobSection } from "./JobSection";
+import { AgentMarkdown } from "@/components/agent/AgentMarkdown";
 import type { InterviewPrepData } from "@/actions/interview-prep.actions";
 import { useAgentChat } from "@/components/agent/AgentChatProvider";
 import {
@@ -404,19 +407,28 @@ function JobDetails({
               ))}
             </div>
           )}
-          <div className="my-4 ml-4">
+          <JobSection icon={ScrollText} title="Job Description">
             <TipTapContentViewer content={job?.description} />
-          </div>
+          </JobSection>
           {parsedMatchData && (
-            <div className="mx-4 mb-4">
-              <h4 className="font-medium mb-2 flex items-center gap-2">
-                <Sparkles className="h-4 w-4" />
-                AI Match Analysis
-              </h4>
+            <JobSection
+              icon={Sparkles}
+              title="AI Match Analysis"
+              meta={job.Resume?.title ? `vs. ${job.Resume.title}` : undefined}
+            >
               <MatchDetails matchData={parsedMatchData} />
-            </div>
+            </JobSection>
           )}
           <InterviewPrepSection data={interviewPrep} open={interviewPrepOpen} />
+          {job.CoverLetter && (
+            <JobSection
+              icon={FileText}
+              title="Cover Letter"
+              meta={job.CoverLetter.title}
+            >
+              <AgentMarkdown text={job.CoverLetter.content} />
+            </JobSection>
+          )}
           <NotesSection jobId={job.id} openTrigger={noteOpenTrigger} />
           <CardFooter></CardFooter>
         </Card>
