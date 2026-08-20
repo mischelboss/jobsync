@@ -1,3 +1,5 @@
+import fs from "fs";
+import path from "path";
 import { z } from "zod";
 import {
   AgentAddJobSchema,
@@ -117,9 +119,38 @@ describe("nested tool registry", () => {
       "review_resume",
       "match_job",
       "generate_cover_letter",
+      "prepare_interview",
     ]);
     expect(isNestedTool("generate_cover_letter")).toBe(true);
     expect(isNestedTool("add_job")).toBe(false);
+  });
+
+  // The list above is a closed set, so it stays green when a NEW generating
+  // tool is added and simply forgotten — which is how prepare_interview
+  // shipped unlisted, losing both its terminal status and the router.refresh
+  // that tells the page behind the panel something was saved. Derive the
+  // expectation from the tools that actually import a nested runner instead.
+  it("lists every tool that calls a nested generation runner", () => {
+    const toolsDir = path.join(process.cwd(), "src/lib/agent/tools");
+    const generating = fs
+      .readdirSync(toolsDir)
+      .filter((f) => f.endsWith(".ts") && f !== "index.ts")
+      .filter((f) =>
+        /runNested(Object)?Generation/.test(
+          fs.readFileSync(path.join(toolsDir, f), "utf8"),
+        ),
+      );
+
+    // camelCase filename -> snake_case tool name (matchJob.ts -> match_job)
+    const expected = generating
+      .map((f) =>
+        f
+          .replace(/\.ts$/, "")
+          .replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`),
+      )
+      .sort();
+
+    expect([...AGENT_NESTED_TOOLS].sort()).toEqual(expected);
   });
 
   // A tool that runs its own generation MUST end the turn, or one turn can
