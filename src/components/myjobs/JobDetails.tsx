@@ -37,6 +37,7 @@ import {
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { InterviewPrepSection } from "./InterviewPrepSection";
+import type { InterviewPrepData } from "@/actions/interview-prep.actions";
 import { useAgentChat } from "@/components/agent/AgentChatProvider";
 import {
   AlertDialog,
@@ -80,6 +81,7 @@ type JobDetailsProps = {
   locations: JobLocation[];
   sources: JobSource[];
   tags: Tag[];
+  interviewPrep: InterviewPrepData | null;
 };
 
 function JobDetails({
@@ -90,8 +92,11 @@ function JobDetails({
   locations,
   sources,
   tags,
+  interviewPrep,
 }: JobDetailsProps) {
-  const [interviewPrepOpen, setInterviewPrepOpen] = useState(false);
+  // Open when this job already has a saved prep, so a page load shows it
+  // without the user having to remember it exists.
+  const [interviewPrepOpen, setInterviewPrepOpen] = useState(!!interviewPrep);
   const {
     open: openChat,
     clear: clearChat,
@@ -411,7 +416,7 @@ function JobDetails({
               <MatchDetails matchData={parsedMatchData} />
             </div>
           )}
-          <InterviewPrepSection jobId={job.id} open={interviewPrepOpen} />
+          <InterviewPrepSection data={interviewPrep} open={interviewPrepOpen} />
           <NotesSection jobId={job.id} openTrigger={noteOpenTrigger} />
           <CardFooter></CardFooter>
         </Card>

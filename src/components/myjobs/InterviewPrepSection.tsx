@@ -1,6 +1,5 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { MessagesSquare } from "lucide-react";
 
 import {
@@ -11,13 +10,10 @@ import {
   CardTitle,
 } from "../ui/card";
 import { InterviewPrepView } from "@/components/interview-prep/InterviewPrepView";
-import {
-  getInterviewPrep,
-  type InterviewPrepData,
-} from "@/actions/interview-prep.actions";
+import type { InterviewPrepData } from "@/actions/interview-prep.actions";
 
 interface Props {
-  jobId: string;
+  data: InterviewPrepData | null;
   open: boolean;
 }
 
@@ -25,25 +21,15 @@ interface Props {
  * Display-only view of the preparation saved against this job.
  *
  * Generation lives in the agent chat's prepare_interview tool, the same way
- * review, match and cover letter moved there upstream — so this section shows
- * what was saved and points at the chat when there is nothing yet.
+ * review, match and cover letter moved there upstream.
+ *
+ * `data` is a server prop rather than a client fetch on purpose: the chat
+ * saves the prep server-side and then calls router.refresh(), which re-runs
+ * the page. A useEffect that had already hydrated would never see that write,
+ * which is exactly how a generated prep could sit in the database while this
+ * section still read "no preparation yet".
  */
-export const InterviewPrepSection = ({ jobId, open }: Props) => {
-  const [hydrating, setHydrating] = useState(false);
-  const [hydrated, setHydrated] = useState(false);
-  const [data, setData] = useState<InterviewPrepData | null>(null);
-
-  useEffect(() => {
-    if (!open || hydrated) return;
-    setHydrated(true);
-    setHydrating(true);
-    getInterviewPrep(jobId)
-      .then((res) => {
-        if (res?.success && res.data) setData(res.data as InterviewPrepData);
-      })
-      .finally(() => setHydrating(false));
-  }, [open, hydrated, jobId]);
-
+export const InterviewPrepSection = ({ data, open }: Props) => {
   if (!open) return null;
 
   return (
@@ -58,17 +44,7 @@ export const InterviewPrepSection = ({ jobId, open }: Props) => {
         </CardDescription>
       </CardHeader>
       <CardContent>
-        {hydrating && <p className="text-sm text-muted-foreground">Loading…</p>}
-
-        {!hydrating && !data && (
-          <p className="text-sm text-muted-foreground">
-            No preparation saved for this job yet. Use the Interview Prep button
-            above and the assistant will research the company and build your
-            questions.
-          </p>
-        )}
-
-        {data && (
+        {data ? (
           <>
             <InterviewPrepView
               questions={data.questions}
@@ -78,6 +54,12 @@ export const InterviewPrepSection = ({ jobId, open }: Props) => {
               Generated {new Date(data.generatedAt).toLocaleString()}
             </p>
           </>
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            No preparation saved for this job yet. Use the Interview Prep button
+            above and the assistant will research the company and build your
+            questions.
+          </p>
         )}
       </CardContent>
     </Card>
