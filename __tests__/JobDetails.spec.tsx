@@ -1,7 +1,8 @@
 import React from "react";
 import JobDetails from "@/components/myjobs/JobDetails";
 import { JobResponse, Tag } from "@/models/job.model";
-import { render, screen, act } from "@testing-library/react";
+import { render, screen, act, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 
 vi.mock("next/navigation", () => ({
   useRouter: vi.fn(() => ({ back: vi.fn(), push: vi.fn(), replace: vi.fn() })),
@@ -9,13 +10,15 @@ vi.mock("next/navigation", () => ({
   usePathname: vi.fn(() => "/dashboard/myjobs/job-1"),
 }));
 
-let capturedOnMatchSaved: ((score: number, data: string) => void) | undefined;
+const chat = {
+  open: vi.fn(),
+  clear: vi.fn().mockResolvedValue(undefined),
+  sendMessage: vi.fn(),
+  approvalPending: false,
+};
 
-vi.mock("@/components/profile/AiJobMatchSection", () => ({
-  AiJobMatchSection: (props: any) => {
-    capturedOnMatchSaved = props.onMatchSaved;
-    return null;
-  },
+vi.mock("@/components/agent/AgentChatProvider", () => ({
+  useAgentChat: () => chat,
 }));
 
 vi.mock("@/components/myjobs/NotesSection", () => ({
@@ -144,7 +147,8 @@ describe("JobDetails – skill badges", () => {
 
 describe("JobDetails – match data display", () => {
   beforeEach(() => {
-    capturedOnMatchSaved = undefined;
+    vi.clearAllMocks();
+    chat.clear.mockResolvedValue(undefined);
   });
 
   it("shows inline match analysis when job has matchData", () => {
@@ -166,46 +170,132 @@ describe("JobDetails – match data display", () => {
     expect(screen.queryByTestId("match-details")).not.toBeInTheDocument();
   });
 
-  it("updates inline match display when onMatchSaved is called", () => {
-    render(<JobDetails {...baseProps} job={makeJob()} />);
-
-    // Initially no match section
-    expect(screen.queryByText("AI Match Analysis")).not.toBeInTheDocument();
-
-    // Simulate save callback from AiJobMatchSection
-    const newMatchData = JSON.stringify({
-      matchScore: 72,
-      summary: "Partial match",
-    });
-
-    act(() => {
-      capturedOnMatchSaved?.(72, newMatchData);
-    });
-
-    expect(screen.getByText("AI Match Analysis")).toBeInTheDocument();
-    expect(screen.getByText("72%")).toBeInTheDocument();
+  it("shows the saved match score from the job prop", () => {
+    render(
+      <JobDetails
+        job={makeJob({
+          matchScore: 72,
+          matchData: JSON.stringify({
+            matchScore: 72,
+            recommendation: "good match",
+            body: "## Summary",
+          }),
+        })}
+        {...baseProps}
+      />,
+    );
+    expect(screen.getByTestId("circular-score")).toHaveTextContent("72%");
     expect(screen.getByTestId("match-details")).toBeInTheDocument();
   });
+});
 
-  it("overwrites existing match data when onMatchSaved is called", () => {
-    const oldMatchData = JSON.stringify({
-      matchScore: 60,
-      summary: "Old match",
-    });
-    render(<JobDetails {...baseProps} job={makeJob({ matchScore: 60, matchData: oldMatchData })} />);
+describe("JobDetails – Match with AI", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    chat.clear.mockResolvedValue(undefined);
+  });
 
-    expect(screen.getByText("60%")).toBeInTheDocument();
+  it("opens the chat and asks for a match when Match with AI is clicked", async () => {
+    chat.approvalPending = false;
+    render(<JobDetails job={makeJob()} {...baseProps} />);
+    await userEvent.click(screen.getByRole("button", { name: /match with ai/i }));
+    await act(async () => {});
+    expect(chat.open).toHaveBeenCalled();
+    expect(chat.clear).toHaveBeenCalled();
+    const sent = chat.sendMessage.mock.calls[0][0];
+    expect(sent.parts[0].text).toMatch(/match/i);
+  });
 
-    const newMatchData = JSON.stringify({
-      matchScore: 90,
-      summary: "New match",
-    });
+  // The panel opens first so a failed clear cannot leave the button dead, and
+  // the match still goes out.
+  it("still asks for the match when clearing the conversation fails", async () => {
+    chat.approvalPending = false;
+    chat.clear.mockRejectedValueOnce(new Error("offline"));
+    render(<JobDetails job={makeJob()} {...baseProps} />);
+    await userEvent.click(screen.getByRole("button", { name: /match with ai/i }));
+    await act(async () => {});
+    expect(chat.open).toHaveBeenCalled();
+    expect(chat.sendMessage).toHaveBeenCalled();
+  });
 
-    act(() => {
-      capturedOnMatchSaved?.(90, newMatchData);
-    });
+  it("asks before clearing a conversation with a pending approval", async () => {
+    chat.approvalPending = true;
+    render(<JobDetails job={makeJob()} {...baseProps} />);
+    await userEvent.click(screen.getByRole("button", { name: /match with ai/i }));
+    expect(
+      screen.getByText(/clear the assistant conversation/i),
+    ).toBeInTheDocument();
+    expect(chat.sendMessage).not.toHaveBeenCalled();
+  });
+});
 
-    expect(screen.queryByText("60%")).not.toBeInTheDocument();
-    expect(screen.getByText("90%")).toBeInTheDocument();
+describe("JobDetails cover letter action", () => {
+  beforeEach(() => {
+    chat.approvalPending = false;
+    vi.clearAllMocks();
+  });
+
+  it("stays enabled when no resume is linked", () => {
+    render(<JobDetails {...baseProps} job={makeJob({ resumeId: undefined })} />);
+    expect(screen.getByTestId("generate-cover-letter-btn")).toBeEnabled();
+  });
+
+  it("disables the action for a title-only description", () => {
+    render(
+      <JobDetails
+        {...baseProps}
+        job={makeJob({
+          resumeId: "resume-1",
+          descriptionCompleteness: "title-only",
+        })}
+      />,
+    );
+    expect(screen.getByTestId("generate-cover-letter-btn")).toBeDisabled();
+  });
+
+  it("enables the action for a real description", () => {
+    render(
+      <JobDetails {...baseProps} job={makeJob({ resumeId: "resume-1" })} />,
+    );
+    expect(screen.getByTestId("generate-cover-letter-btn")).toBeEnabled();
+  });
+
+  it("opens the chat and asks for a letter naming the job", async () => {
+    render(
+      <JobDetails {...baseProps} job={makeJob({ resumeId: "resume-1" })} />,
+    );
+    await userEvent.click(screen.getByTestId("generate-cover-letter-btn"));
+    expect(chat.open).toHaveBeenCalled();
+    await waitFor(() => expect(chat.sendMessage).toHaveBeenCalled());
+    const sent = chat.sendMessage.mock.calls[0][0];
+    expect(sent.parts[0].text).toMatch(/cover letter/i);
+    expect(sent.parts[0].text).toContain("Frontend Developer");
+    expect(sent.parts[0].text).toContain("Acme Corp");
+  });
+
+  it("asks before clearing a conversation with a pending approval", async () => {
+    chat.approvalPending = true;
+    render(
+      <JobDetails {...baseProps} job={makeJob({ resumeId: "resume-1" })} />,
+    );
+    await userEvent.click(screen.getByTestId("generate-cover-letter-btn"));
+    expect(
+      screen.getByText(/clear the assistant conversation/i),
+    ).toBeInTheDocument();
+    expect(chat.sendMessage).not.toHaveBeenCalled();
+  });
+
+  // Derived from the server prop, not local state: the chat saves the letter
+  // server-side and fires router.refresh().
+  it("labels the action Regenerate when a letter is already linked", () => {
+    render(
+      <JobDetails
+        {...baseProps}
+        job={makeJob({ resumeId: "resume-1", coverLetterId: "cl-1" })}
+      />,
+    );
+    expect(screen.getByTestId("generate-cover-letter-btn")).toHaveTextContent(
+      /regenerate/i,
+    );
   });
 });

@@ -2,6 +2,7 @@
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogOverlay,
   DialogTitle,
@@ -28,7 +29,7 @@ import {
 } from "@/models/job.model";
 import { addDays } from "date-fns";
 import { z } from "zod";
-import { toast } from "../ui/use-toast";
+import { toastActionResult } from "@/lib/toast";
 import {
   Form,
   FormControl,
@@ -53,6 +54,10 @@ import { getResumeList } from "@/actions/profile.actions";
 import { getCoverLetterList } from "@/actions/coverLetter.actions";
 import { TagInput } from "./TagInput";
 import { APP_CONSTANTS } from "@/lib/constants";
+import {
+  getFromLocalStorage,
+  saveToLocalStorage,
+} from "@/utils/localstorage.utils";
 
 type AddJobProps = {
   jobStatuses: JobStatus[];
@@ -98,16 +103,33 @@ export function AddJob({
     if (!dialogOpen && searchParams.get("add-job") === "true") {
       const params = new URLSearchParams(searchParams.toString());
       params.delete("add-job");
-      const newPath = params.toString() ? `?${params.toString()}` : window.location.pathname;
+      const newPath = params.toString()
+        ? `?${params.toString()}`
+        : window.location.pathname;
       router.replace(newPath);
     }
   }, [dialogOpen, router, searchParams]);
+  // Pre-fill with the last-used location/source, but only if that entity
+  // still exists (handles deletion and cross-user localStorage collisions,
+  // since `locations`/`jobSources` are already scoped to the current user).
+  const lastLocationId = getFromLocalStorage(
+    APP_CONSTANTS.LAST_JOB_LOCATION_STORAGE_KEY,
+    null,
+  );
+  const lastSourceId = getFromLocalStorage(
+    APP_CONSTANTS.LAST_JOB_SOURCE_STORAGE_KEY,
+    null,
+  );
   const newJobDefaultValues = {
     type: Object.keys(JOB_TYPES)[0],
     workplaceType: "ONSITE",
     dueDate: addDays(new Date(), 3),
     status: jobStatuses[0]?.id,
     salaryRange: "1",
+    jobUrl: "",
+    jobDescription: "N/A",
+    location: locations.find((l) => l.id === lastLocationId)?.id,
+    source: jobSources.find((s) => s.id === lastSourceId)?.id,
   };
 
   const form = useForm<z.infer<typeof AddJobFormSchema>>({
@@ -157,7 +179,7 @@ export function AddJob({
         salaryRange: editJob.salaryRange,
         jobDescription: editJob.description,
         applied: editJob.applied,
-        jobUrl: editJob.jobUrl ?? undefined,
+        jobUrl: editJob.jobUrl ?? "",
         dateApplied: editJob.appliedDate ?? undefined,
         resume: editJob.Resume?.id ?? undefined,
         coverLetter: editJob.CoverLetter?.id ?? undefined,
@@ -197,29 +219,30 @@ export function AddJob({
 
   function onSubmit(data: z.infer<typeof AddJobFormSchema>) {
     startTransition(async () => {
-      const { success, message } = editJob
-        ? await updateJob(data)
-        : await addJob(data);
-      reset();
-      setDialogOpen(false);
-      if (!success) {
-        toast({
-          variant: "destructive",
-          title: "Error!",
-          description: message,
-        });
-      }
-      redirect(redirectPath ?? "/dashboard/myjobs");
-    });
-    toast({
-      variant: "success",
-      description: `Job has been ${
-        editJob ? "updated" : "created"
-      } successfully`,
+      const result = editJob ? await updateJob(data) : await addJob(data);
+      toastActionResult(result, {
+        success: `Job has been ${editJob ? "updated" : "created"} successfully`,
+        onSuccess: () => {
+          saveToLocalStorage(
+            APP_CONSTANTS.LAST_JOB_LOCATION_STORAGE_KEY,
+            data.location,
+          );
+          saveToLocalStorage(
+            APP_CONSTANTS.LAST_JOB_SOURCE_STORAGE_KEY,
+            data.source,
+          );
+          reset();
+          setDialogOpen(false);
+          redirect(redirectPath ?? "/dashboard/myjobs");
+        },
+      });
     });
   }
 
   const pageTitle = editJob ? "Edit Job" : "Add Job";
+  const pageDescription = editJob
+    ? "Update the details of this job application."
+    : "Track a new job application.";
 
   const addJobForm = () => {
     reset(newJobDefaultValues);
@@ -274,6 +297,7 @@ export function AddJob({
               <DialogTitle data-testid="add-job-dialog-title">
                 {pageTitle}
               </DialogTitle>
+              <DialogDescription>{pageDescription}</DialogDescription>
             </DialogHeader>
             <Form {...form}>
               <form
@@ -459,7 +483,7 @@ export function AddJob({
                       <FormItem className="flex flex-row">
                         <Switch
                           id="applied-switch"
-                          checked={field.value}
+                          checked={field.value ?? false}
                           onCheckedChange={(a) => {
                             field.onChange(a);
                             jobAppliedChange(a);
@@ -484,7 +508,7 @@ export function AddJob({
                     control={form.control}
                     name="status"
                     render={({ field }) => (
-                      <FormItem className="flex flex-col [&>button]:capitalize">
+                      <FormItem className="flex flex-col">
                         <FormLabel>Status</FormLabel>
                         <SelectFormCtrl
                           label="Job Status"
@@ -562,7 +586,7 @@ export function AddJob({
                     control={form.control}
                     name="resume"
                     render={({ field }) => (
-                      <FormItem className="flex flex-col [&>button]:capitalize">
+                      <FormItem className="flex flex-col">
                         <FormLabel>Resume</FormLabel>
                         <SelectFormCtrl
                           label="Resume"
@@ -590,7 +614,7 @@ export function AddJob({
                     control={form.control}
                     name="coverLetter"
                     render={({ field }) => (
-                      <FormItem className="flex flex-col [&>button]:capitalize">
+                      <FormItem className="flex flex-col">
                         <FormLabel>Cover Letter</FormLabel>
                         <SelectFormCtrl
                           label="Cover Letter"

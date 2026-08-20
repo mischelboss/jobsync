@@ -3,6 +3,7 @@ import prisma from "@/lib/db";
 import { handleError } from "@/lib/utils";
 import { getCurrentUser } from "@/utils/user.utils";
 import { APP_CONSTANTS } from "@/lib/constants";
+import { canonicalizeEntityValue } from "@/lib/jobs/canonicalize";
 
 export const getAllJobTitles = async (): Promise<any | undefined> => {
   try {
@@ -25,7 +26,8 @@ export const getAllJobTitles = async (): Promise<any | undefined> => {
 export const getJobTitleList = async (
   page: number = 1,
   limit: number = APP_CONSTANTS.RECORDS_PER_PAGE,
-  countBy?: string
+  countBy?: string,
+  search?: string,
 ): Promise<any | undefined> => {
   try {
     const user = await getCurrentUser();
@@ -35,11 +37,17 @@ export const getJobTitleList = async (
     }
     const skip = (page - 1) * limit;
 
+    const whereClause: any = {
+      createdBy: user.id,
+    };
+
+    if (search) {
+      whereClause.label = { contains: search };
+    }
+
     const [data, total, totalCounts] = await Promise.all([
       prisma.jobTitle.findMany({
-        where: {
-          createdBy: user.id,
-        },
+        where: whereClause,
         skip,
         take: limit,
         ...(countBy
@@ -67,9 +75,7 @@ export const getJobTitleList = async (
         },
       }),
       prisma.jobTitle.count({
-        where: {
-          createdBy: user.id,
-        },
+        where: whereClause,
       }),
       countBy
         ? prisma.job.groupBy({
@@ -115,7 +121,7 @@ export const createJobTitle = async (
       throw new Error("Not authenticated");
     }
 
-    const value = label.trim().toLowerCase();
+    const value = canonicalizeEntityValue(label.trim());
 
     const upsertedTitle = await prisma.jobTitle.upsert({
       where: { value_createdBy: { value, createdBy: user.id } },

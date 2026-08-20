@@ -6,7 +6,7 @@ import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Badge } from "../ui/badge";
 import { Label } from "../ui/label";
-import { toast } from "../ui/use-toast";
+import { toastSuccess, toastError } from "@/lib/toast";
 import {
   Dialog,
   DialogContent,
@@ -51,11 +51,7 @@ function CopyButton({ text }: { text: string }) {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      toast({
-        title: "Copy failed",
-        description: "Couldn't copy to clipboard. Please copy the text manually.",
-        variant: "destructive",
-      });
+      toastError("Couldn't copy to clipboard. Please copy the text manually.", "Copy failed");
     }
   };
   return (
@@ -70,7 +66,7 @@ function CodeSnippet({ label, code }: { label: string; code: string }) {
     <div className="space-y-1">
       <p className="text-xs text-muted-foreground font-medium">{label}</p>
       <div className="flex gap-2 items-start">
-        <pre className="flex-1 bg-muted rounded p-2 text-xs overflow-x-auto whitespace-pre-wrap break-all">{code}</pre>
+        <pre className="flex-1 bg-muted rounded-sm p-2 text-xs overflow-x-auto whitespace-pre-wrap break-all">{code}</pre>
         <CopyButton text={code} />
       </div>
     </div>
@@ -180,7 +176,7 @@ export default function McpAccessSettings() {
     const result = await createMcpToken({ name: tokenName.trim(), expiryDays });
     setGenerating(false);
     if (!result.success) {
-      toast({ title: "Error", description: result.message, variant: "destructive" });
+      toastError(result.message);
       return;
     }
     setRevealedToken({ token: result.token, name: result.record.name });
@@ -195,11 +191,11 @@ export default function McpAccessSettings() {
     const result = await revokeMcpToken(id);
     setRevoking(null);
     if (!result.success) {
-      toast({ title: "Error", description: result.message ?? "Failed to revoke", variant: "destructive" });
+      toastError(result.message ?? "Failed to revoke");
       return;
     }
     setTokens((prev) => prev.filter((t) => t.id !== id));
-    toast({ title: "Token revoked" });
+    toastSuccess("Token revoked");
   };
 
   return (
@@ -215,7 +211,7 @@ export default function McpAccessSettings() {
 
       <Card>
         <CardHeader>
-          <CardTitle>MCP Endpoint</CardTitle>
+          <CardTitle className="text-lg font-medium">MCP Endpoint</CardTitle>
           <CardDescription>Connect AI agents to JobSync via the Model Context Protocol.</CardDescription>
         </CardHeader>
         <CardContent>
@@ -230,12 +226,12 @@ export default function McpAccessSettings() {
       </Card>
 
       <Card>
-        <CardHeader className="flex-row items-start justify-between">
-          <div>
-            <CardTitle>Personal Access Tokens</CardTitle>
+        <CardHeader className="flex-row flex-wrap items-start justify-between gap-2">
+          <div className="min-w-0">
+            <CardTitle className="text-lg font-medium">Personal Access Tokens</CardTitle>
             <CardDescription>Tokens authenticate external agents to call MCP tools.</CardDescription>
           </div>
-          <Button size="sm" onClick={() => setShowGenerateDialog(true)} disabled={isLoading}>
+          <Button size="sm" className="shrink-0" onClick={() => setShowGenerateDialog(true)} disabled={isLoading}>
             <Plus className="h-4 w-4 mr-1" />
             Generate
           </Button>
@@ -250,7 +246,7 @@ export default function McpAccessSettings() {
           ) : (
             <div className="space-y-3">
               {tokens.map((t) => (
-                <div key={t.id} className="flex items-center justify-between border rounded p-3 gap-3">
+                <div key={t.id} className="flex items-start justify-between border rounded-sm p-3 gap-3">
                   <div className="min-w-0 flex-1">
                     <p className="font-medium text-sm truncate">{t.name}</p>
                     <p className="text-xs text-muted-foreground font-mono">{t.tokenPrefix}…</p>
@@ -259,7 +255,7 @@ export default function McpAccessSettings() {
                       <span>Expires {format(new Date(t.expiresAt), "PP")}</span>
                       {t.lastUsedAt && <span>Last used {format(new Date(t.lastUsedAt), "PP")}</span>}
                     </div>
-                    <div className="flex gap-1 mt-1">
+                    <div className="flex flex-wrap gap-1 mt-1">
                       {t.scopes.map((s) => (
                         <Badge key={s} variant="secondary" className="text-xs">{s}</Badge>
                       ))}

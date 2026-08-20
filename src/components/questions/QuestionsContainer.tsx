@@ -1,5 +1,6 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   Card,
   CardContent,
@@ -15,7 +16,7 @@ import {
   getQuestionById,
   getQuestionsList,
 } from "@/actions/question.actions";
-import { toast } from "../ui/use-toast";
+import { toastActionResult, toastError } from "@/lib/toast";
 import { Question } from "@/models/question.model";
 import { Tag } from "@/models/job.model";
 import { RecordsCount } from "../RecordsCount";
@@ -35,6 +36,8 @@ function QuestionsContainer({
   filterKey,
   onQuestionsChanged,
 }: QuestionsContainerProps) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [questions, setQuestions] = useState<Question[]>([]);
   const [page, setPage] = useState(1);
   const [totalQuestions, setTotalQuestions] = useState(0);
@@ -43,6 +46,7 @@ function QuestionsContainer({
   const [dialogOpen, setDialogOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const hasSearched = useRef(false);
+  const autoOpenHandled = useRef(false);
 
   const loadQuestions = useCallback(
     async (pageNum: number, filter?: string, search?: string) => {
@@ -60,11 +64,7 @@ function QuestionsContainer({
         setTotalQuestions(result.total);
         setPage(pageNum);
       } else {
-        toast({
-          variant: "destructive",
-          title: "Error!",
-          description: result?.message || "Failed to load questions.",
-        });
+        toastError(result?.message || "Failed to load questions.");
       }
       setLoading(false);
     },
@@ -77,30 +77,17 @@ function QuestionsContainer({
   }, [loadQuestions, filterKey, searchTerm, onQuestionsChanged]);
 
   const onDeleteQuestion = async (questionId: string) => {
-    const { success, message } = await deleteQuestion(questionId);
-    if (success) {
-      toast({
-        variant: "success",
-        description: "Question has been deleted successfully",
-      });
-      reloadQuestions();
-    } else {
-      toast({
-        variant: "destructive",
-        title: "Error!",
-        description: message,
-      });
-    }
+    const result = await deleteQuestion(questionId);
+    toastActionResult(result, {
+      success: "Question has been deleted successfully",
+      onSuccess: () => reloadQuestions(),
+    });
   };
 
   const onEditQuestion = async (question: Question) => {
     const { data, success, message } = await getQuestionById(question.id);
     if (!success) {
-      toast({
-        variant: "destructive",
-        title: "Error!",
-        description: message,
-      });
+      toastError(message);
       return;
     }
     setEditQuestion(data);
@@ -111,6 +98,20 @@ function QuestionsContainer({
     setEditQuestion(null);
     setDialogOpen(true);
   };
+
+  useEffect(() => {
+    if (autoOpenHandled.current) return;
+    if (searchParams.get("add-question") === "true") {
+      autoOpenHandled.current = true;
+      setDialogOpen(true);
+      const params = new URLSearchParams(searchParams.toString());
+      params.delete("add-question");
+      const newPath = params.toString()
+        ? `?${params.toString()}`
+        : window.location.pathname;
+      router.replace(newPath);
+    }
+  }, [router, searchParams]);
 
   useEffect(() => {
     loadQuestions(1, filterKey, searchTerm || undefined);
@@ -145,7 +146,7 @@ function QuestionsContainer({
               />
             )}
           </div>
-          <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
+          <div className="flex flex-wrap items-center justify-end gap-2 sm:ml-auto">
             <SearchInput
               value={searchTerm}
               onChange={setSearchTerm}

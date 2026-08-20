@@ -22,6 +22,7 @@ import {
   format,
 } from "date-fns";
 import { DatePicker } from "../DatePicker";
+import { TimePicker } from "../TimePicker";
 import TiptapEditor from "../TiptapEditor";
 import { Combobox } from "../ComboBox";
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
@@ -31,6 +32,7 @@ import {
   getAllActivityTypes,
 } from "@/actions/activity.actions";
 import { combineDateAndTime } from "@/lib/utils";
+import { toastActionResult, toastError } from "@/lib/toast";
 
 interface ActivityFormProps {
   onClose: () => void;
@@ -66,11 +68,13 @@ const ActivityFormComponent = ({
   const form = useForm<z.infer<typeof AddActivityFormSchema>>({
     resolver: zodResolver(AddActivityFormSchema),
     defaultValues,
+    mode: "onTouched",
   });
 
   const {
     reset,
     getValues,
+    trigger,
     watch,
     formState: { errors, isValid },
   } = form;
@@ -111,11 +115,14 @@ const ActivityFormComponent = ({
         ["startDate", "startTime", "endDate", "endTime"].includes(name || "")
       ) {
         calculateDuration();
+        // Cross-field errors land on the end fields, so changing a start
+        // field would otherwise leave a stale error until submit
+        trigger(["startTime", "endDate", "endTime"]);
       }
     });
 
     return () => subscription.unsubscribe();
-  }, [calculateDuration, loadActivityTypes, watch]);
+  }, [calculateDuration, loadActivityTypes, trigger, watch]);
 
   const onSubmit = async (data: z.infer<typeof AddActivityFormSchema>) => {
     const { startDate, startTime, endDate, endTime, ...rest } = data;
@@ -133,10 +140,16 @@ const ActivityFormComponent = ({
         duration: totalMinutes,
       };
       const response = await createActivity(payload);
-      onClose();
-      reloadActivities();
+      toastActionResult(response, {
+        success: "Activity has been created successfully",
+        onSuccess: () => {
+          onClose();
+          reloadActivities();
+        },
+      });
     } catch (error) {
       console.error("Error parsing date and time:", error);
+      toastError("Failed to create activity.");
     }
   };
   return (
@@ -211,9 +224,7 @@ const ActivityFormComponent = ({
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Start Time</FormLabel>
-                <FormControl>
-                  <Input {...field} placeholder="hh:mm AM/PM" />
-                </FormControl>
+                <TimePicker field={field} />
                 <FormMessage>
                   {errors.startTime && (
                     <span className="text-red-500">
@@ -265,9 +276,7 @@ const ActivityFormComponent = ({
                     )}
                   </span>
                 </FormLabel>
-                <FormControl>
-                  <Input {...field} placeholder="hh:mm AM/PM" />
-                </FormControl>
+                <TimePicker field={field} />
                 <FormMessage>
                   {errors.endTime && (
                     <span className="text-red-500">

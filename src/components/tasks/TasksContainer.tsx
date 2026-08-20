@@ -1,5 +1,6 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   Card,
   CardContent,
@@ -17,8 +18,13 @@ import {
   updateTaskStatus,
   startActivityFromTask,
 } from "@/actions/task.actions";
-import { toast } from "../ui/use-toast";
-import { Task, TaskStatus, TASK_STATUSES } from "@/models/task.model";
+import { toastActionResult, toastError } from "@/lib/toast";
+import {
+  Task,
+  TaskGroupBy,
+  TaskStatus,
+  TASK_STATUSES,
+} from "@/models/task.model";
 import {
   Select,
   SelectContent,
@@ -61,6 +67,8 @@ function TasksContainer({
   onFilterChange,
   onTasksChanged,
 }: TasksContainerProps) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const { refreshCurrentActivity } = useActivity();
   const { requestStart, confirmDialog } = useActivitySwitchConfirm();
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -69,9 +77,7 @@ function TasksContainer({
   const [editTask, setEditTask] = useState<Task | null>(null);
   const [initialLoading, setInitialLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [groupBy, setGroupBy] = useState<
-    "none" | "createdDate" | "dueDate" | "updatedDate" | "activityType"
-  >("none");
+  const [groupBy, setGroupBy] = useState<TaskGroupBy>("none");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState<TaskStatus[]>(
     DEFAULT_STATUS_FILTER,
@@ -79,6 +85,7 @@ function TasksContainer({
   const [searchTerm, setSearchTerm] = useState("");
   const hasSearched = useRef(false);
   const sentinelRef = useRef<HTMLDivElement>(null);
+  const autoOpenHandled = useRef(false);
   const [mounted, setMounted] = useState(false);
 
   // Avoid hydration mismatch with Radix UI components
@@ -94,6 +101,7 @@ function TasksContainer({
       filter?: string,
       statuses?: TaskStatus[],
       search?: string,
+      group?: TaskGroupBy,
     ) => {
       if (pageNum === 1) setInitialLoading(true);
       else setLoadingMore(true);
@@ -103,17 +111,14 @@ function TasksContainer({
         filter,
         statuses,
         search,
+        group,
       );
       if (success && data) {
         setTasks((prev) => (pageNum === 1 ? data : [...prev, ...data]));
         setTotalTasks(total);
         setPage(pageNum);
       } else {
-        toast({
-          variant: "destructive",
-          title: "Error!",
-          description: message,
-        });
+        toastError(message);
       }
       setInitialLoading(false);
       setLoadingMore(false);
@@ -122,35 +127,28 @@ function TasksContainer({
   );
 
   const reloadTasks = useCallback(async () => {
-    await loadTasks(1, filterKey, statusFilter, searchTerm || undefined);
+    await loadTasks(
+      1,
+      filterKey,
+      statusFilter,
+      searchTerm || undefined,
+      groupBy,
+    );
     onTasksChanged?.();
-  }, [loadTasks, filterKey, statusFilter, searchTerm, onTasksChanged]);
+  }, [loadTasks, filterKey, statusFilter, searchTerm, groupBy, onTasksChanged]);
 
   const onDeleteTask = async (taskId: string) => {
-    const { success, message } = await deleteTaskById(taskId);
-    if (success) {
-      toast({
-        variant: "success",
-        description: "Task has been deleted successfully",
-      });
-      reloadTasks();
-    } else {
-      toast({
-        variant: "destructive",
-        title: "Error!",
-        description: message,
-      });
-    }
+    const result = await deleteTaskById(taskId);
+    toastActionResult(result, {
+      success: "Task has been deleted successfully",
+      onSuccess: () => reloadTasks(),
+    });
   };
 
   const onEditTask = async (taskId: string) => {
     const { data, success, message } = await getTaskById(taskId);
     if (!success) {
-      toast({
-        variant: "destructive",
-        title: "Error!",
-        description: message,
-      });
+      toastError(message);
       return;
     }
     setEditTask(data);
@@ -168,39 +166,23 @@ function TasksContainer({
       prev.map((task) => (task.id === taskId ? { ...task, status } : task)),
     );
 
-    const { success, message } = await updateTaskStatus(taskId, status);
-    if (success) {
-      toast({
-        variant: "success",
-        description: "Task status updated successfully",
-      });
+    const result = await updateTaskStatus(taskId, status);
+    if (result.success) {
       onTasksChanged?.();
     } else {
       setTasks(originalTasks);
-      toast({
-        variant: "destructive",
-        title: "Error!",
-        description: message,
-      });
     }
+    toastActionResult(result, { success: "Task status updated successfully" });
   };
 
   const onStartActivity = (taskId: string) => {
     requestStart(async () => {
-      const { success, message } = await startActivityFromTask(taskId);
-      if (success) {
-        await refreshCurrentActivity();
-        toast({
-          variant: "success",
-          description: "Activity started from task",
-        });
-      } else {
-        toast({
-          variant: "destructive",
-          title: "Error!",
-          description: message,
-        });
-      }
+      const result = await startActivityFromTask(taskId);
+      toastActionResult(result, {
+        success: "Activity started from task",
+        onSuccess: () => refreshCurrentActivity(),
+      });
+      return result.success;
     });
   };
 
@@ -209,10 +191,30 @@ function TasksContainer({
   };
 
   useEffect(() => {
+    if (autoOpenHandled.current) return;
+    if (searchParams.get("add-task") === "true") {
+      autoOpenHandled.current = true;
+      setDialogOpen(true);
+      const params = new URLSearchParams(searchParams.toString());
+      params.delete("add-task");
+      const newPath = params.toString()
+        ? `?${params.toString()}`
+        : window.location.pathname;
+      router.replace(newPath);
+    }
+  }, [router, searchParams]);
+
+  useEffect(() => {
     (async () =>
-      await loadTasks(1, filterKey, statusFilter, searchTerm || undefined))();
+      await loadTasks(
+        1,
+        filterKey,
+        statusFilter,
+        searchTerm || undefined,
+        groupBy,
+      ))();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loadTasks, filterKey, statusFilter]);
+  }, [loadTasks, filterKey, statusFilter, groupBy]);
 
   // Debounced search effect
   useEffect(() => {
@@ -222,7 +224,7 @@ function TasksContainer({
     if (searchTerm === "" && !hasSearched.current) return;
 
     const timer = setTimeout(() => {
-      loadTasks(1, filterKey, statusFilter, searchTerm || undefined);
+      loadTasks(1, filterKey, statusFilter, searchTerm || undefined, groupBy);
     }, 300);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -241,7 +243,13 @@ function TasksContainer({
           !loadingMore &&
           tasks.length < totalTasks
         ) {
-          loadTasks(page + 1, filterKey, statusFilter, searchTerm || undefined);
+          loadTasks(
+            page + 1,
+            filterKey,
+            statusFilter,
+            searchTerm || undefined,
+            groupBy,
+          );
         }
       },
       { threshold: APP_CONSTANTS.INTERSECTION_OBSERVER_THRESHOLD },
@@ -256,20 +264,14 @@ function TasksContainer({
     filterKey,
     statusFilter,
     searchTerm,
+    groupBy,
     initialLoading,
     loadingMore,
     loadTasks,
   ]);
 
   const onGroupByChange = (value: string) => {
-    setGroupBy(
-      value as
-        | "none"
-        | "createdDate"
-        | "dueDate"
-        | "updatedDate"
-        | "activityType",
-    );
+    setGroupBy(value as TaskGroupBy);
   };
 
   const toggleStatusFilter = (status: TaskStatus) => {
@@ -284,7 +286,7 @@ function TasksContainer({
     <>
       <Card x-chunk="dashboard-tasks-chunk-0" className="h-full">
         <ResponsiveCardHeader>
-          <div className="flex items-baseline gap-2">
+          <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
             <CardTitle>Tasks</CardTitle>
             {!initialLoading && totalTasks > 0 && (
               <RecordsCount
@@ -294,7 +296,7 @@ function TasksContainer({
               />
             )}
           </div>
-          <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
+          <div className="flex flex-wrap items-center justify-end gap-2 sm:ml-auto">
             <SearchInput
               value={searchTerm}
               onChange={setSearchTerm}
@@ -414,6 +416,7 @@ function TasksContainer({
         onTaskSaved={reloadTasks}
         dialogOpen={dialogOpen}
         setDialogOpen={setDialogOpen}
+        onSaveAndStart={onStartActivity}
       />
       {confirmDialog}
     </>

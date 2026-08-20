@@ -3,10 +3,10 @@ import { addExperience, updateExperience } from "@/actions/profile.actions";
 import { getAllCompanies } from "@/actions/company.actions";
 import { getAllJobTitles } from "@/actions/jobtitle.actions";
 import { getAllJobLocations } from "@/actions/jobLocation.actions";
-import { screen, render, waitFor, fireEvent } from "@testing-library/react";
+import { screen, render, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ResumeSection } from "@/models/profile.model";
-import { toast } from "@/components/ui/use-toast";
+import { toastSuccess, toastError } from "@/lib/toast";
 
 vi.mock("@/actions/profile.actions", () => ({
   addExperience: vi.fn(),
@@ -79,8 +79,9 @@ vi.mock("@/components/DatePicker", () => ({
 }));
 
 // Mock toast
-vi.mock("@/components/ui/use-toast", () => ({
-  toast: vi.fn(),
+vi.mock("@/lib/toast", () => ({
+  toastSuccess: vi.fn(),
+  toastError: vi.fn(),
 }));
 
 describe("AddExperience Component", () => {
@@ -459,7 +460,10 @@ describe("AddExperience Component", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByTestId("combobox-title")).toBeInTheDocument();
+      const jobTitleSelect = screen.getByTestId(
+        "combobox-title"
+      ) as HTMLSelectElement;
+      expect(jobTitleSelect.options.length).toBeGreaterThan(1);
     });
 
     const jobTitleSelect = screen.getByTestId(
@@ -540,11 +544,8 @@ describe("AddExperience Component", () => {
 
     await waitFor(() => {
       expect(mockSetDialogOpen).toHaveBeenCalledWith(false);
-      expect(toast).toHaveBeenCalledWith(
-        expect.objectContaining({
-          variant: "success",
-          description: "Experience has been added successfully",
-        })
+      expect(toastSuccess).toHaveBeenCalledWith(
+        "Experience has been added successfully"
       );
     });
   });
@@ -567,7 +568,8 @@ describe("AddExperience Component", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByTestId("combobox-title")).toBeInTheDocument();
+      const jobTitleSelect = screen.getByTestId("combobox-title") as HTMLSelectElement;
+      expect(jobTitleSelect.options.length).toBeGreaterThan(1);
     });
 
     const jobTitleSelect = screen.getByTestId(
@@ -602,13 +604,7 @@ describe("AddExperience Component", () => {
     await user.click(saveButton);
 
     await waitFor(() => {
-      expect(toast).toHaveBeenCalledWith(
-        expect.objectContaining({
-          variant: "destructive",
-          title: "Error!",
-          description: "Failed to add experience",
-        })
-      );
+      expect(toastError).toHaveBeenCalledWith("Failed to add experience");
       expect(mockSetDialogOpen).not.toHaveBeenCalledWith(false);
     });
   });
@@ -651,7 +647,10 @@ describe("AddExperience Component", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByTestId("combobox-title")).toBeInTheDocument();
+      const jobTitleSelect = screen.getByTestId(
+        "combobox-title"
+      ) as HTMLSelectElement;
+      expect(jobTitleSelect.options.length).toBeGreaterThan(1);
     });
 
     const jobTitleSelect = screen.getByTestId(
@@ -669,11 +668,8 @@ describe("AddExperience Component", () => {
     await user.click(saveButton);
 
     await waitFor(() => {
-      expect(toast).toHaveBeenCalledWith(
-        expect.objectContaining({
-          variant: "success",
-          description: "Experience has been updated successfully",
-        })
+      expect(toastSuccess).toHaveBeenCalledWith(
+        "Experience has been updated successfully"
       );
     });
   });
@@ -726,7 +722,10 @@ describe("AddExperience Component", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByTestId("combobox-title")).toBeInTheDocument();
+      const jobTitleSelect = screen.getByTestId(
+        "combobox-title"
+      ) as HTMLSelectElement;
+      expect(jobTitleSelect.options.length).toBeGreaterThan(1);
     });
 
     const jobTitleSelect = screen.getByTestId("combobox-title");
@@ -735,20 +734,24 @@ describe("AddExperience Component", () => {
     const startDateInput = screen.getByTestId("datepicker-startDate");
     const jobDescriptionEditor = screen.getByTestId("tiptap-editor");
 
-    fireEvent.change(jobTitleSelect, { target: { value: "title-1" } });
-    fireEvent.change(companySelect, { target: { value: "company-1" } });
-    fireEvent.change(locationSelect, { target: { value: "location-1" } });
-    fireEvent.change(startDateInput, { target: { value: "2023-01-01" } });
-    fireEvent.change(jobDescriptionEditor, {
-      target: { value: "Developed amazing features" },
+    await user.selectOptions(jobTitleSelect, "title-1");
+    await user.selectOptions(companySelect, "company-1");
+    await user.selectOptions(locationSelect, "location-1");
+    await user.type(startDateInput, "2023-01-01");
+    await user.type(jobDescriptionEditor, "Developed amazing features");
+
+    await waitFor(() => {
+      const saveButton = screen.getByRole("button", { name: /save/i });
+      expect(saveButton).not.toBeDisabled();
     });
 
     const saveButton = screen.getByRole("button", { name: /save/i });
     await user.click(saveButton);
 
-    const saveBtn = screen.getByRole("button", { name: /save/i });
-    const loader = saveBtn.querySelector(".spinner");
-    expect(loader).toBeInTheDocument();
+    await waitFor(() => {
+      const saveBtn = screen.getByRole("button", { name: /save/i });
+      expect(saveBtn.querySelector(".spinner")).toBeInTheDocument();
+    });
 
     await waitFor(() => {
       expect(addExperience).toHaveBeenCalledTimes(1);

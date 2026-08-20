@@ -2,7 +2,10 @@ import MarkdownIt from "markdown-it";
 import prisma from "@/lib/db";
 import { APP_CONSTANTS } from "@/lib/constants";
 import { normalizeJobUrl } from "@/lib/scraper/utils";
+import { findExistingJobByUrl } from "@/lib/jobs/jobDedupe";
 import { createJobRecord } from "@/lib/jobs/createJobRecord";
+import { classifyDescriptionCompleteness } from "@/lib/jobs/descriptionCompleteness";
+import type { DescriptionCompleteness } from "@/models/job.model";
 import {
   resolveCompany,
   resolveJobTitle,
@@ -43,6 +46,7 @@ export interface CreateJobFromNamesResult {
   jobId?: string;
   duplicateOf?: { id: string; title: string; company: string };
   resolutions: ResolvedEntity[];
+  descriptionCompleteness?: DescriptionCompleteness;
   message: string;
 }
 
@@ -120,6 +124,8 @@ export async function createJobFromNames(
   // Default appliedDate if applied is true but no date provided
   const resolvedAppliedDate = applied && !appliedDate ? new Date() : (appliedDate ?? null);
 
+  const descriptionCompleteness = classifyDescriptionCompleteness(jobDescription);
+
   const job = await createJobRecord({
     jobTitleId: resolvedTitle.id,
     companyId: resolvedCompany.id,
@@ -140,6 +146,7 @@ export async function createJobFromNames(
     applied,
     tagIds: resolvedTagsResult.resolved.map((t) => t.id),
     createdVia: createdVia ?? null,
+    descriptionCompleteness,
   });
 
   const message = buildSuccessMessage(resolutions, resolvedTagsResult.dropped, job.id);
@@ -148,6 +155,7 @@ export async function createJobFromNames(
     created: true,
     jobId: job.id,
     resolutions,
+    descriptionCompleteness,
     message,
   };
 }
@@ -158,16 +166,13 @@ async function detectDuplicate(
   jobTitleId: string,
   jobUrl?: string,
 ): Promise<{ id: string; title: string; company: string } | null> {
-  // Tier 1 — URL match (no time window)
+  // Tier 1 — URL match (no time window). Uses the same canonical key as
+  // automation dedup (jobDedupeKey folds host case, leading "www.", param
+  // order, and tracking params), so URL variants of the same posting are
+  // caught — not just exact-string matches.
   if (jobUrl) {
-    const normalized = normalizeJobUrl(jobUrl);
-    const byUrl = await prisma.job.findFirst({
-      where: { userId, jobUrl: normalized },
-      select: { id: true, JobTitle: { select: { label: true } }, Company: { select: { label: true } } },
-    });
-    if (byUrl) {
-      return { id: byUrl.id, title: byUrl.JobTitle.label, company: byUrl.Company.label };
-    }
+    const byUrl = await findExistingJobByUrl(userId, jobUrl);
+    if (byUrl) return byUrl;
   }
 
   // Tier 2 — company + title within window
@@ -215,6 +220,8 @@ function buildDuplicateMessage(
   });
   return (
     `Duplicate detected — existing job "${dup.title}" at "${dup.company}" (id: ${dup.id}). ` +
-    `Pass allowDuplicate: true to force create. Resolutions: ${parts.join("; ")}.`
+    `To enrich or correct it, call update_job with jobId "${dup.id}" instead of re-adding. ` +
+    `Pass allowDuplicate: true only if this is genuinely a different posting. ` +
+    `Resolutions: ${parts.join("; ")}.`
   );
 }

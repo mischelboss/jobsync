@@ -8,7 +8,10 @@ vi.mock("@/actions/prompt.actions", () => ({
   resetPromptOverride: vi.fn(),
 }));
 
-vi.mock("@/components/ui/use-toast", () => ({ toast: vi.fn() }));
+vi.mock("@/lib/toast", () => ({
+  toastSuccess: vi.fn(),
+  toastError: vi.fn(),
+}));
 
 import PromptLibrarySettings from "@/components/settings/PromptLibrarySettings";
 import {

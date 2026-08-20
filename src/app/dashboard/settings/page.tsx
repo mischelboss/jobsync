@@ -5,6 +5,7 @@ import AiSettings from "@/components/settings/AiSettings";
 import ApiKeySettings from "@/components/settings/ApiKeySettings";
 import PromptLibrarySettings from "@/components/settings/PromptLibrarySettings";
 import ImapSettings from "@/components/settings/ImapSettings";
+import DataSettings from "@/components/settings/DataSettings";
 import DisplaySettings from "@/components/settings/DisplaySettings";
 import McpAccessSettings from "@/components/settings/McpAccessSettings";
 import SettingsSidebar, { type SettingsSection } from "@/components/settings/SettingsSidebar";
@@ -29,6 +30,7 @@ function Settings() {
           {activeSection === "email-mailbox" && <ImapSettings />}
           {activeSection === "appearance" && <DisplaySettings />}
           {activeSection === "mcp-access" && <McpAccessSettings />}
+          {activeSection === "data" && <DataSettings />}
         </div>
       </div>
     </div>
