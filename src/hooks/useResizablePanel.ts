@@ -13,6 +13,10 @@ export function useResizablePanel(storageKey: string) {
     getFromLocalStorage(storageKey, DEFAULT_WIDTH)
   );
   const isDragging = useRef(false);
+  // Mirrored into state so consumers can suppress width transitions mid-drag.
+  const [dragging, setDragging] = useState(false);
+  // Manual dragging always takes control back from the expand toggle.
+  const [isExpanded, setIsExpanded] = useState(false);
   const startX = useRef(0);
   const startWidth = useRef(0);
   const widthRef = useRef(width);
@@ -23,12 +27,29 @@ export function useResizablePanel(storageKey: string) {
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     isDragging.current = true;
+    setDragging(true);
+    setIsExpanded(false);
     startX.current = e.clientX;
     startWidth.current = widthRef.current;
     document.body.style.userSelect = "none";
     document.body.style.cursor = "col-resize";
     e.preventDefault();
   }, []);
+
+  const toggleExpand = useCallback(() => {
+    let next: number;
+    if (isExpanded) {
+      next = DEFAULT_WIDTH;
+    } else {
+      const sidebarWidth =
+        document.getElementById(APP_CONSTANTS.SIDEBAR_DOM_ID)?.offsetWidth ?? 0;
+      next = window.innerWidth - sidebarWidth;
+    }
+    widthRef.current = next;
+    setWidth(next);
+    setIsExpanded(!isExpanded);
+    saveToLocalStorage(storageKey, next);
+  }, [isExpanded, storageKey]);
 
   useEffect(() => {
     const onMouseMove = (e: MouseEvent) => {
@@ -43,6 +64,7 @@ export function useResizablePanel(storageKey: string) {
     const onMouseUp = () => {
       if (!isDragging.current) return;
       isDragging.current = false;
+      setDragging(false);
       document.body.style.userSelect = "";
       document.body.style.cursor = "";
       saveToLocalStorage(storageKey, widthRef.current);
@@ -56,5 +78,5 @@ export function useResizablePanel(storageKey: string) {
     };
   }, [storageKey]);
 
-  return { width, handleMouseDown };
+  return { width, handleMouseDown, isDragging: dragging, isExpanded, toggleExpand };
 }

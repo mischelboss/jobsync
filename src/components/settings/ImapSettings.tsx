@@ -12,7 +12,7 @@ import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
 import { Switch } from "../ui/switch";
-import { toast } from "../ui/use-toast";
+import { toastSuccess, toastError } from "@/lib/toast";
 import { Loader2, CheckCircle, XCircle, Trash2, Plug } from "lucide-react";
 import {
   getImapConfig,
@@ -83,13 +83,9 @@ function ImapSettings() {
     if (result.success) {
       setConfigured(true);
       setForm((f) => ({ ...f, password: "" }));
-      toast({ title: "Mailbox saved" });
+      toastSuccess("Mailbox saved");
     } else {
-      toast({
-        title: "Error",
-        description: result.message || "Failed to save mailbox",
-        variant: "destructive",
-      });
+      toastError(result.message || "Failed to save mailbox");
     }
   };
 
@@ -104,16 +100,15 @@ function ImapSettings() {
     });
     setIsTesting(false);
     if (result.success) {
-      toast({
-        title: "Connection successful",
-        description: "JobSync could sign in to the mailbox.",
-      });
+      toastSuccess(
+        "JobSync could sign in to the mailbox.",
+        "Connection successful",
+      );
     } else {
-      toast({
-        title: "Connection failed",
-        description: result.message || "Could not connect",
-        variant: "destructive",
-      });
+      toastError(
+        result.message || "Could not connect",
+        "Connection failed",
+      );
     }
   };
 
@@ -124,13 +119,9 @@ function ImapSettings() {
     if (result.success) {
       setForm(EMPTY);
       setConfigured(false);
-      toast({ title: "Mailbox removed" });
+      toastSuccess("Mailbox removed");
     } else {
-      toast({
-        title: "Error",
-        description: result.message || "Failed to remove mailbox",
-        variant: "destructive",
-      });
+      toastError(result.message || "Failed to remove mailbox");
     }
   };
 

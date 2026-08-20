@@ -13,34 +13,35 @@ datasource db {
 }
 
 model User {
-  id             String           @id @default(uuid())
-  name           String
-  email          String           @unique
-  password       String
-  createdAt      DateTime         @default(now())
-  jobsApplied    Job[]
-  JobTitle       JobTitle[]
-  Location       Location[]
-  Company        Company[]
-  JobSource      JobSource[]
-  Contact        Contact[]
-  Profile        Profile[]
-  Activity       Activity[]
-  ActivityType   ActivityType[]
-  Task           Task[]
-  Automation     Automation[]
-  Settings       UserSettings?
-  ApiKey         ApiKey[]
-  Note           Note[]
-  Tag            Tag[]
-  Question       Question[]
-  McpAccessToken McpAccessToken[]
-  ImapConfig     ImapConfig?
-  PromptOverride PromptOverride[]
-  CompanyResearch CompanyResearch[]
-  InterviewPrep  InterviewPrep[]
-  defaultResumeId String?
-  defaultResume   Resume?          @relation("UserDefaultResume", fields: [defaultResumeId], references: [id], onDelete: SetNull)
+  id               String           @id @default(uuid())
+  name             String
+  email            String           @unique
+  password         String
+  createdAt        DateTime         @default(now())
+  jobsApplied      Job[]
+  JobTitle         JobTitle[]
+  Location         Location[]
+  Company          Company[]
+  JobSource        JobSource[]
+  Contact          Contact[]
+  Profile          Profile[]
+  Activity         Activity[]
+  ActivityType     ActivityType[]
+  Task             Task[]
+  Automation       Automation[]
+  Settings         UserSettings?
+  ApiKey           ApiKey[]
+  Note             Note[]
+  Tag              Tag[]
+  Question         Question[]
+  McpAccessToken   McpAccessToken[]
+  ImapConfig       ImapConfig?
+  PromptOverride   PromptOverride[]
+  CompanyResearch  CompanyResearch[]
+  InterviewPrep    InterviewPrep[]
+  ChatConversation ChatConversation?
+  defaultResumeId  String?
+  defaultResume    Resume?          @relation("UserDefaultResume", fields: [defaultResumeId], references: [id], onDelete: SetNull)
 }
 
 // One IMAP mailbox per user (not per automation). App-password/credentials are
@@ -409,6 +410,9 @@ model Job {
 
   // MCP provenance: which agent/token created this job (null = UI or automation)
   createdVia      String?
+  // Word-count classification of `description` at write time:
+  // "title-only" | "partial" | "full". Null for pre-existing/UI jobs.
+  descriptionCompleteness String?
 
   @@index([userId, automationId])
   @@index([userId, discoveryStatus])
@@ -442,6 +446,13 @@ model Activity {
   startTime    DateTime
   endTime      DateTime?
   duration     Int?
+  // Completed break time in minutes. Existing rows default to 0, so
+  // duration keeps meaning (endTime - startTime) for everything already saved.
+  breakMinutes     Int       @default(0)
+  // Set only while a break is open — this is the on-break flag.
+  breakStartedAt   DateTime?
+  // Drives the countdown ring only; never the arithmetic.
+  breakPlannedMins Int?
   description  String?
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
@@ -620,11 +631,20 @@ model McpAccessToken {
   name        String
   tokenHash   String    @unique
   tokenPrefix String
-  scopes      String    // JSON array string; new tokens are always ["jobs:write","questions:write"]
+  scopes      String    // JSON array string; new tokens are always ["jobs:write","questions:write","resume:write"]
   expiresAt   DateTime
   lastUsedAt  DateTime?
   createdAt   DateTime  @default(now())
 
   @@unique([userId, name])
   @@index([userId])
+}
+
+model ChatConversation {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  messages  String   // JSON-serialized UIMessage[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }

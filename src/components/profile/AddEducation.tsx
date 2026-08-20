@@ -7,10 +7,11 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import {
   Dialog,
   DialogContent,
-  DialogFooter,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "../ui/dialog";
+import { FormDialogFooter } from "../FormDialogFooter";
 import {
   Form,
   FormControl,
@@ -23,10 +24,8 @@ import { Input } from "../ui/input";
 import { DatePicker } from "../DatePicker";
 import { Switch } from "../ui/switch";
 import TiptapEditor from "../TiptapEditor";
-import { Button } from "../ui/button";
 import { useCallback, useEffect, useState, useTransition } from "react";
-import { toast } from "../ui/use-toast";
-import { Loader } from "lucide-react";
+import { toastSuccess, toastError } from "@/lib/toast";
 import { Combobox } from "../ComboBox";
 import { JobLocation } from "@/models/job.model";
 import { addEducation, updateEducation } from "@/actions/profile.actions";
@@ -48,6 +47,9 @@ function AddEducation({
   educationToEdit,
 }: AddEducationProps) {
   const pageTitle = educationToEdit ? "Edit Education" : "Add Education";
+  const pageDescription = educationToEdit
+    ? "Update this education entry on your resume."
+    : "Add an education entry to your resume.";
   const [isPending, startTransition] = useTransition();
   const [locations, setLocations] = useState<JobLocation[]>([]);
 
@@ -126,20 +128,13 @@ function AddEducation({
         ? await updateEducation(data)
         : await addEducation(data);
       if (!res.success) {
-        toast({
-          variant: "destructive",
-          title: "Error!",
-          description: res.message,
-        });
+        toastError(res.message);
       } else {
         reset();
         setDialogOpen(false);
-        toast({
-          variant: "success",
-          description: `Education has been ${
-            educationToEdit ? "updated" : "added"
-          } successfully`,
-        });
+        toastSuccess(`Education has been ${
+          educationToEdit ? "updated" : "added"
+        } successfully`);
       }
     });
   };
@@ -151,6 +146,7 @@ function AddEducation({
       <DialogContent className="h-full md:h-[85%] lg:max-h-screen md:max-w-[40rem] overflow-y-scroll">
         <DialogHeader>
           <DialogTitle>{pageTitle}</DialogTitle>
+          <DialogDescription>{pageDescription}</DialogDescription>
         </DialogHeader>
         <Form {...form}>
           <form
@@ -326,24 +322,11 @@ function AddEducation({
                 )}
               />
             </div>
-            <div className="md:col-span-2 mt-4">
-              <DialogFooter>
-                <div>
-                  <Button
-                    type="reset"
-                    variant="outline"
-                    className="mt-2 md:mt-0 w-full"
-                    onClick={closeDialog}
-                  >
-                    Cancel
-                  </Button>
-                </div>
-                <Button type="submit" disabled={!formState.isDirty}>
-                  Save
-                  {isPending && <Loader className="h-4 w-4 shrink-0 spinner" />}
-                </Button>
-              </DialogFooter>
-            </div>
+            <FormDialogFooter
+              onCancel={closeDialog}
+              isPending={isPending}
+              saveDisabled={!formState.isDirty}
+            />
           </form>
         </Form>
       </DialogContent>

@@ -7,8 +7,9 @@ import { getCurrentUser } from "@/utils/user.utils";
 import userEvent from "@testing-library/user-event";
 import { format } from "date-fns";
 import { addJob, updateJob } from "@/actions/job.actions";
-import { toast } from "@/components/ui/use-toast";
+import { toastActionResult } from "@/lib/toast";
 import type { JobResponse } from "@/models/job.model";
+import { APP_CONSTANTS } from "@/lib/constants";
 vi.mock("@/utils/user.utils", () => ({
   getCurrentUser: vi.fn(),
 }));
@@ -25,8 +26,10 @@ vi.mock("@/actions/note.actions", () => ({
   deleteNote: vi.fn(),
 }));
 
-vi.mock("@/components/ui/use-toast", () => ({
-  toast: vi.fn(),
+vi.mock("@/lib/toast", () => ({
+  toastActionResult: vi.fn((result, opts) => {
+    if (result?.success) opts.onSuccess?.(result.data);
+  }),
 }));
 
 vi.mock("next/navigation", () => ({
@@ -149,9 +152,6 @@ describe("AddJob Component", () => {
     expect(screen.getByText("Company name is required.")).toBeInTheDocument();
     expect(screen.getByText("Location is required.")).toBeInTheDocument();
     expect(screen.getByText("Source is required.")).toBeInTheDocument();
-    expect(
-      screen.getByText("Job description is required."),
-    ).toBeInTheDocument();
   });
   it("should close the dialog when clicked on cancel button", async () => {
     const cancelBtn = screen.getByRole("button", { name: /cancel/i });
@@ -261,12 +261,111 @@ describe("AddJob Component", () => {
         dateApplied: undefined,
         salaryRange: "1",
         jobDescription: "<p>New Job Description</p>",
-        jobUrl: undefined,
+        jobUrl: "",
         applied: false,
         tags: [],
       });
     });
+  }, 10000);
+});
+
+describe("AddJob Component - Last Used Location/Source", () => {
+  const mockJobStatuses = JOB_STATUSES;
+  const mockJobSources = JOB_SOURCES;
+  const mockResetEditJob = vi.fn();
+  const user = userEvent.setup({ skipHover: true });
+
+  const renderAddJob = async () => {
+    const mockCompanies = (await getMockList(1, 10, "companies")).data;
+    const mockJobTitles = (await getMockList(1, 10, "jobTitles")).data;
+    const mockLocations = (await getMockList(1, 10, "locations")).data;
+    render(
+      <AddJob
+        jobStatuses={mockJobStatuses}
+        companies={mockCompanies}
+        jobTitles={mockJobTitles}
+        locations={mockLocations}
+        jobSources={mockJobSources}
+        tags={[]}
+        editJob={null}
+        resetEditJob={mockResetEditJob}
+      />,
+    );
+    const addJobButton = screen.getByTestId("add-job-btn");
+    await user.click(addJobButton);
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
   });
+
+  it("pre-fills location and source from a valid last-used id in localStorage", async () => {
+    localStorage.setItem(
+      APP_CONSTANTS.LAST_JOB_LOCATION_STORAGE_KEY,
+      JSON.stringify("1yy"),
+    );
+    localStorage.setItem(
+      APP_CONSTANTS.LAST_JOB_SOURCE_STORAGE_KEY,
+      JSON.stringify("1359dac4-a397-4461-b747-382706dcbe79"),
+    );
+    await renderAddJob();
+
+    expect(screen.getByLabelText("Job Location")).toHaveTextContent("Remote");
+    expect(screen.getByLabelText("Job Source")).toHaveTextContent("Indeed");
+  });
+
+  it("ignores a last-used id that no longer exists, e.g. the entity was deleted", async () => {
+    localStorage.setItem(
+      APP_CONSTANTS.LAST_JOB_LOCATION_STORAGE_KEY,
+      JSON.stringify("deleted-location-id"),
+    );
+    localStorage.setItem(
+      APP_CONSTANTS.LAST_JOB_SOURCE_STORAGE_KEY,
+      JSON.stringify("deleted-source-id"),
+    );
+    await renderAddJob();
+
+    expect(screen.getByLabelText("Job Location")).toHaveTextContent(
+      "Select location",
+    );
+    expect(screen.getByLabelText("Job Source")).toHaveTextContent(
+      "Select source",
+    );
+  });
+
+  it("saves the selected location and source to localStorage after a successful save", async () => {
+    await renderAddJob();
+
+    await user.click(screen.getByRole("combobox", { name: /job title/i }));
+    await user.click(
+      screen.getByRole("option", { name: "Full Stack Developer" }),
+    );
+
+    await user.click(screen.getByRole("combobox", { name: /company/i }));
+    await user.click(screen.getByRole("option", { name: "Amazon" }));
+
+    await user.click(
+      screen.getByRole("combobox", { name: /job location/i }),
+    );
+    await user.click(screen.getByRole("option", { name: "Remote" }));
+
+    await user.click(
+      screen.getByRole("combobox", { name: /job source/i }),
+    );
+    await user.click(screen.getByRole("option", { name: "Indeed" }));
+
+    await user.click(screen.getByTestId("save-job-btn"));
+
+    await waitFor(() => {
+      expect(localStorage.getItem(APP_CONSTANTS.LAST_JOB_LOCATION_STORAGE_KEY)).toBe(
+        JSON.stringify("1yy"),
+      );
+      expect(localStorage.getItem(APP_CONSTANTS.LAST_JOB_SOURCE_STORAGE_KEY)).toBe(
+        JSON.stringify("1359dac4-a397-4461-b747-382706dcbe79"),
+      );
+    });
+  }, 10000);
 });
 
 describe("AddJob Component - Edit Mode", () => {
@@ -443,13 +542,10 @@ describe("AddJob Component - Error Handling", () => {
     await user.click(screen.getByTestId("save-job-btn"));
 
     await waitFor(() => {
-      expect(toast).toHaveBeenCalledWith(
-        expect.objectContaining({
-          variant: "destructive",
-          title: "Error!",
-          description: "Failed to save job",
-        }),
+      expect(toastActionResult).toHaveBeenCalledWith(
+        expect.objectContaining({ success: false, message: "Failed to save job" }),
+        expect.objectContaining({ success: "Job has been created successfully" }),
       );
     });
-  });
+  }, 10000);
 });

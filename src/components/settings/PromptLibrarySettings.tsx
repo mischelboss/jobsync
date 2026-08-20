@@ -16,7 +16,7 @@ import { Button } from "../ui/button";
 import { Badge } from "../ui/badge";
 import { Label } from "../ui/label";
 import { Textarea } from "../ui/textarea";
-import { toast } from "../ui/use-toast";
+import { toastSuccess, toastError } from "@/lib/toast";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -108,13 +108,10 @@ function PromptEditor({
     setSaving(false);
 
     if (result?.success) {
-      toast({ variant: "success", description: `${entry.label} saved` });
+      toastSuccess(`${entry.label} saved`);
       onSaved();
     } else {
-      toast({
-        variant: "destructive",
-        description: result?.message ?? "Failed to save prompt",
-      });
+      toastError(result?.message ?? "Failed to save prompt");
     }
   };
 
@@ -124,13 +121,10 @@ function PromptEditor({
     setResetting(false);
 
     if (result?.success) {
-      toast({ variant: "success", description: `${entry.label} reset to default` });
+      toastSuccess(`${entry.label} reset to default`);
       onSaved();
     } else {
-      toast({
-        variant: "destructive",
-        description: result?.message ?? "Failed to reset prompt",
-      });
+      toastError(result?.message ?? "Failed to reset prompt");
     }
   };
 
@@ -277,7 +271,7 @@ function PromptLibrarySettings() {
         Object.fromEntries(result.data.map((row) => [row.promptId, row])),
       );
     } else if (result?.message) {
-      toast({ variant: "destructive", description: result.message });
+      toastError(result.message);
     }
     setIsLoading(false);
   }, []);

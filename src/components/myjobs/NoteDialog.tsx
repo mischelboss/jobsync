@@ -2,6 +2,7 @@
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -13,7 +14,7 @@ import { z } from "zod";
 import { NoteFormSchema } from "@/models/note.schema";
 import { NoteResponse } from "@/models/note.model";
 import { addNote, updateNote } from "@/actions/note.actions";
-import { toast } from "../ui/use-toast";
+import { toastError, toastSuccess } from "@/lib/toast";
 import { useEffect, useTransition } from "react";
 import { Loader } from "lucide-react";
 import {
@@ -65,19 +66,12 @@ export function NoteDialog({
         : await addNote(data);
 
       if (result.success) {
-        toast({
-          variant: "success",
-          description: `Note ${editNote ? "updated" : "added"} successfully`,
-        });
+        toastSuccess(`Note ${editNote ? "updated" : "added"} successfully`);
         form.reset({ jobId, content: "" });
         onOpenChange(false);
         onSaved();
       } else {
-        toast({
-          variant: "destructive",
-          title: "Error!",
-          description: result.message,
-        });
+        toastError(result.message);
       }
     });
   }
@@ -87,6 +81,11 @@ export function NoteDialog({
       <DialogContent className="sm:max-w-[600px] max-h-[80vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{editNote ? "Edit Note" : "Add Note"}</DialogTitle>
+          <DialogDescription>
+            {editNote
+              ? "Update this note on the job application."
+              : "Add a note to this job application."}
+          </DialogDescription>
         </DialogHeader>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">

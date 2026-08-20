@@ -1,5 +1,6 @@
 "use client";
 import {
+  Copy,
   FilePenLine,
   MoreVertical,
   Paperclip,
@@ -27,7 +28,7 @@ import { format } from "date-fns";
 import Link from "next/link";
 import { Button } from "../ui/button";
 import { useMemo, useState } from "react";
-import { toast } from "../ui/use-toast";
+import { toastSuccess, toastError } from "@/lib/toast";
 import { deleteResumeById, setDefaultResume } from "@/actions/profile.actions";
 import { deleteCoverLetterById } from "@/actions/coverLetter.actions";
 import { DeleteAlertDialog } from "../DeleteAlertDialog";
@@ -43,6 +44,7 @@ type DocumentTableProps = {
   documents: ProfileDocument[];
   editResume: (doc: ProfileDocument) => void;
   editCoverLetter: (doc: ProfileDocument) => void;
+  copyResume: (doc: ProfileDocument) => void;
   reloadDocuments: () => void;
   defaultResumeId?: string | null;
 };
@@ -51,6 +53,7 @@ function DocumentTable({
   documents,
   editResume,
   editCoverLetter,
+  copyResume,
   reloadDocuments,
   defaultResumeId,
 }: DocumentTableProps) {
@@ -80,17 +83,10 @@ function DocumentTable({
     if (!doc.id) return;
     const { success, message } = await setDefaultResume(doc.id);
     if (success) {
-      toast({
-        variant: "success",
-        description: `"${doc.title}" is now your default resume.`,
-      });
+      toastSuccess(`"${doc.title}" is now your default resume.`);
       reloadDocuments();
     } else {
-      toast({
-        variant: "destructive",
-        title: "Error!",
-        description: message,
-      });
+      toastError(message);
     }
   };
 
@@ -111,15 +107,20 @@ function DocumentTable({
     }
   };
 
+  const onCopyResume = (doc: ProfileDocument) => {
+    if (!doc.id) return;
+    if (!hasMinResumeSections(doc.sectionCount)) {
+      warnInsufficientResumeSections("creating a copy");
+      return;
+    }
+    copyResume(doc);
+  };
+
   const deleteDocument = async (doc: ProfileDocument) => {
     if (!doc.id) return;
     if (doc.jobCount > 0) {
       const label = doc.type === "resume" ? "resume" : "cover letter";
-      return toast({
-        variant: "destructive",
-        title: "Error!",
-        description: `Number of jobs using ${label} must be 0!`,
-      });
+      return toastError(`Number of jobs using ${label} must be 0!`);
     }
 
     const { success, message } =
@@ -129,17 +130,10 @@ function DocumentTable({
 
     if (success) {
       const label = doc.type === "resume" ? "Resume" : "Cover letter";
-      toast({
-        variant: "success",
-        description: `${label} has been deleted successfully`,
-      });
+      toastSuccess(`${label} has been deleted successfully`);
       reloadDocuments();
     } else {
-      toast({
-        variant: "destructive",
-        title: "Error!",
-        description: message,
-      });
+      toastError(message);
     }
   };
 
@@ -149,9 +143,11 @@ function DocumentTable({
         <TableHeader>
           <TableRow>
             <TableHead>Title</TableHead>
-            <TableHead>Type</TableHead>
-            <TableHead>Created</TableHead>
-            <TableHead className="hidden md:table-cell">Updated</TableHead>
+            <TableHead className="whitespace-nowrap">Type</TableHead>
+            <TableHead className="whitespace-nowrap">Created</TableHead>
+            <TableHead className="hidden md:table-cell whitespace-nowrap">
+              Updated
+            </TableHead>
             <TableHead>Jobs</TableHead>
             <TableHead>Actions</TableHead>
             <TableHead>
@@ -189,16 +185,16 @@ function DocumentTable({
                     </button>
                   )}
                 </TableCell>
-                <TableCell>
+                <TableCell className="whitespace-nowrap">
                   <StatusBadge
                     label={isResume ? "Resume" : "Cover Letter"}
                     color={DOCUMENT_TYPE_BADGE_COLORS[doc.type]}
                   />
                 </TableCell>
-                <TableCell>
+                <TableCell className="whitespace-nowrap">
                   {doc.createdAt && format(doc.createdAt, "PP")}
                 </TableCell>
-                <TableCell className="hidden md:table-cell">
+                <TableCell className="hidden md:table-cell whitespace-nowrap">
                   {doc.updatedAt && format(doc.updatedAt, "PP")}
                 </TableCell>
                 <TableCell>{doc.jobCount}</TableCell>
@@ -232,6 +228,14 @@ function DocumentTable({
                               View/Edit Resume
                             </DropdownMenuItem>
                           </Link>
+                          <DropdownMenuItem
+                            className="cursor-pointer"
+                            onClick={() => onCopyResume(doc)}
+                            data-testid="copy-resume-menu-item"
+                          >
+                            <Copy className="mr-2 h-4 w-4" />
+                            Create a copy
+                          </DropdownMenuItem>
                           {!doc.isDefault && (
                             <DropdownMenuItem
                               className="cursor-pointer"

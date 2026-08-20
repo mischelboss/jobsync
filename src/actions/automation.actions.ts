@@ -144,6 +144,19 @@ export async function createAutomation(input: CreateAutomationInput): Promise<{
       };
     }
 
+    const scheduleClash = await db.automation.findFirst({
+      where: { userId: user.id, scheduleHour: validated.scheduleHour },
+      select: { id: true },
+    });
+    if (scheduleClash) {
+      return {
+        success: false,
+        message: `Another automation already runs at ${validated.scheduleHour
+          .toString()
+          .padStart(2, "0")}:00. Please choose a different time.`,
+      };
+    }
+
     const resume = await db.resume.findFirst({
       where: {
         id: validated.resumeId,
@@ -251,6 +264,22 @@ export async function updateAutomation(
     }
 
     if (validated.scheduleHour !== undefined) {
+      const scheduleClash = await db.automation.findFirst({
+        where: {
+          userId: user.id,
+          scheduleHour: validated.scheduleHour,
+          id: { not: id },
+        },
+        select: { id: true },
+      });
+      if (scheduleClash) {
+        return {
+          success: false,
+          message: `Another automation already runs at ${validated.scheduleHour
+            .toString()
+            .padStart(2, "0")}:00. Please choose a different time.`,
+        };
+      }
       updateData.nextRunAt = calculateNextRunAt(validated.scheduleHour);
     }
 
@@ -542,7 +571,10 @@ export async function getDiscoveredJobById(id: string): Promise<{
   }
 }
 
-export async function dismissDiscoveredJob(id: string): Promise<{
+async function setDiscoveredJobStatus(
+  id: string,
+  status: "accepted" | "dismissed",
+): Promise<{
   success: boolean;
   data?: DiscoveredJob;
   message?: string;
@@ -567,7 +599,7 @@ export async function dismissDiscoveredJob(id: string): Promise<{
 
     const updated = await db.job.update({
       where: { id },
-      data: { discoveryStatus: "dismissed" },
+      data: { discoveryStatus: status },
       include: {
         automation: {
           select: { id: true, name: true },
@@ -583,8 +615,19 @@ export async function dismissDiscoveredJob(id: string): Promise<{
       data: updated as unknown as DiscoveredJob,
     };
   } catch (error) {
-    return formatError(error, "Failed to dismiss discovered job");
+    return formatError(
+      error,
+      `Failed to ${status === "accepted" ? "accept" : "dismiss"} discovered job`,
+    );
   }
+}
+
+export async function dismissDiscoveredJob(id: string): Promise<{
+  success: boolean;
+  data?: DiscoveredJob;
+  message?: string;
+}> {
+  return setDiscoveredJobStatus(id, "dismissed");
 }
 
 // Bulk-deletes discovered jobs for one automation. Always keeps accepted jobs
@@ -624,44 +667,7 @@ export async function acceptDiscoveredJob(id: string): Promise<{
   data?: DiscoveredJob;
   message?: string;
 }> {
-  try {
-    const user = await getCurrentUser();
-    if (!user) {
-      return { success: false, message: "Not authenticated" };
-    }
-
-    const job = await db.job.findFirst({
-      where: {
-        id,
-        userId: user.id,
-        automationId: { not: null },
-      },
-    });
-
-    if (!job) {
-      return { success: false, message: "Discovered job not found" };
-    }
-
-    const updated = await db.job.update({
-      where: { id },
-      data: { discoveryStatus: "accepted" },
-      include: {
-        automation: {
-          select: { id: true, name: true },
-        },
-        JobTitle: { select: { label: true } },
-        Company: { select: { label: true } },
-        Location: { select: { label: true } },
-      },
-    });
-
-    return {
-      success: true,
-      data: updated as unknown as DiscoveredJob,
-    };
-  } catch (error) {
-    return formatError(error, "Failed to accept discovered job");
-  }
+  return setDiscoveredJobStatus(id, "accepted");
 }
 
 // Runs an on-demand LLM match for an un-analyzed discovered job using the

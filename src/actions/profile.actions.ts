@@ -19,11 +19,21 @@ import {
   buildInsufficientSectionsMessage,
   hasMinResumeSections,
 } from "@/lib/resumeSections";
+import { buildCopyTitle, ensureUniqueTitle } from "@/lib/resumeCopyTitle";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import path from "path";
 import fs from "fs";
 import { writeFile } from "fs/promises";
+
+// Canonical IDOR guard for actions that only need to confirm resume ownership
+const assertResumeOwnership = async (resumeId: string, userId: string) => {
+  const owned = await prisma.resume.findUnique({
+    where: { id: resumeId, profile: { userId } },
+    select: { id: true },
+  });
+  if (!owned) throw new Error("Resume not found or access denied");
+};
 
 const resumeListSelect = {
   id: true,
@@ -36,6 +46,25 @@ const resumeListSelect = {
     select: {
       Job: true,
       ResumeSections: true,
+    },
+  },
+} as const;
+
+// Full section tree for cloning. Unlike resumeDetailInclude this includes
+// `others` and omits File/Tag joins, which a copy does not need.
+const resumeCopySelect = {
+  id: true,
+  profileId: true,
+  title: true,
+  ContactInfo: true,
+  ResumeSections: {
+    include: {
+      summary: true,
+      workExperiences: true,
+      educations: true,
+      licenseOrCertifications: true,
+      others: true,
+      skills: true,
     },
   },
 } as const;
@@ -452,6 +481,192 @@ export const editResume = async (
   }
 };
 
+export const getResumeCopyTitleSuggestion = async (
+  resumeId: string,
+): Promise<any | undefined> => {
+  try {
+    const user = await getCurrentUser();
+    if (!user) {
+      throw new Error("Not authenticated");
+    }
+
+    const source = await prisma.resume.findUnique({
+      where: { id: resumeId, profile: { userId: user.id } },
+      select: { title: true },
+    });
+    if (!source) {
+      throw new Error("Resume not found or access denied");
+    }
+
+    // All titles, not just the current page, so the suggestion never collides
+    const existing = await prisma.resume.findMany({
+      where: { profile: { userId: user.id } },
+      select: { title: true },
+    });
+
+    return {
+      success: true,
+      data: buildCopyTitle(
+        source.title,
+        existing.map((r) => r.title),
+      ),
+    };
+  } catch (error) {
+    const msg = "Failed to build a title for the copy.";
+    return handleError(error, msg);
+  }
+};
+
+export const copyResume = async (
+  resumeId: string,
+  title: string,
+): Promise<any | undefined> => {
+  try {
+    const user = await getCurrentUser();
+    if (!user) {
+      throw new Error("Not authenticated");
+    }
+
+    // Read outside the transaction so the SQLite write lock is held briefly
+    const source = await prisma.resume.findUnique({
+      where: { id: resumeId, profile: { userId: user.id } },
+      select: resumeCopySelect,
+    });
+    if (!source) {
+      throw new Error("Resume not found or access denied");
+    }
+
+    if (!hasMinResumeSections(source.ResumeSections.length)) {
+      throw new Error(buildInsufficientSectionsMessage("creating a copy"));
+    }
+
+    const existing = await prisma.resume.findMany({
+      where: { profile: { userId: user.id } },
+      select: { title: true },
+    });
+    const uniqueTitle = ensureUniqueTitle(
+      title,
+      existing.map((r) => r.title),
+    );
+
+    const created = await prisma.$transaction(
+      async (tx) => {
+        const newResume = await tx.resume.create({
+          data: { profileId: source.profileId, title: uniqueTitle },
+          select: { id: true },
+        });
+
+        if (source.ContactInfo) {
+          const c = source.ContactInfo;
+          await tx.contactInfo.create({
+            data: {
+              resumeId: newResume.id,
+              firstName: c.firstName,
+              lastName: c.lastName,
+              headline: c.headline,
+              email: c.email,
+              phone: c.phone,
+              address: c.address,
+              url1: c.url1,
+              url1Label: c.url1Label,
+              url2: c.url2,
+              url2Label: c.url2Label,
+            },
+          });
+        }
+
+        for (const section of source.ResumeSections) {
+          const newSection = await tx.resumeSection.create({
+            data: {
+              // Connect (not resumeId) because Prisma forbids mixing a scalar
+              // FK with the nested summary create below
+              Resume: { connect: { id: newResume.id } },
+              sectionTitle: section.sectionTitle,
+              sectionType: section.sectionType,
+              // Summary is 1:1 via summaryId, so nest it with the section
+              ...(section.summary
+                ? { summary: { create: { content: section.summary.content } } }
+                : {}),
+            },
+            select: { id: true },
+          });
+
+          if (section.workExperiences.length > 0) {
+            await tx.workExperience.createMany({
+              data: section.workExperiences.map((w) => ({
+                resumeSectionId: newSection.id,
+                companyId: w.companyId,
+                jobTitleId: w.jobTitleId,
+                locationId: w.locationId,
+                startDate: w.startDate,
+                endDate: w.endDate,
+                description: w.description,
+              })),
+            });
+          }
+
+          if (section.educations.length > 0) {
+            await tx.education.createMany({
+              data: section.educations.map((e) => ({
+                resumeSectionId: newSection.id,
+                institution: e.institution,
+                degree: e.degree,
+                fieldOfStudy: e.fieldOfStudy,
+                locationId: e.locationId,
+                startDate: e.startDate,
+                endDate: e.endDate,
+                description: e.description,
+              })),
+            });
+          }
+
+          if (section.licenseOrCertifications.length > 0) {
+            await tx.licenseOrCertification.createMany({
+              data: section.licenseOrCertifications.map((l) => ({
+                resumeSectionId: newSection.id,
+                title: l.title,
+                organization: l.organization,
+                issueDate: l.issueDate,
+                expirationDate: l.expirationDate,
+                credentialUrl: l.credentialUrl,
+              })),
+            });
+          }
+
+          if (section.others.length > 0) {
+            await tx.otherSection.createMany({
+              data: section.others.map((o) => ({
+                resumeSectionId: newSection.id,
+                title: o.title,
+                content: o.content,
+              })),
+            });
+          }
+
+          if (section.skills.length > 0) {
+            await tx.skill.createMany({
+              data: section.skills.map((s) => ({
+                resumeSectionId: newSection.id,
+                tagId: s.tagId,
+                category: s.category,
+                order: s.order,
+              })),
+            });
+          }
+        }
+
+        return newResume;
+      },
+      { timeout: 15000 },
+    );
+
+    return { success: true, data: { id: created.id, title: uniqueTitle } };
+  } catch (error) {
+    const msg = "Failed to copy resume.";
+    return handleError(error, msg);
+  }
+};
+
 export const deleteResumeById = async (
   resumeId: string,
 ): Promise<any | undefined> => {
@@ -553,11 +768,7 @@ export const addResumeSummary = async (
       throw new Error("Not authenticated");
     }
 
-    const owned = await prisma.resume.findUnique({
-      where: { id: data.resumeId!, profile: { userId: user.id } },
-      select: { id: true },
-    });
-    if (!owned) throw new Error("Resume not found or access denied");
+    await assertResumeOwnership(data.resumeId!, user.id);
 
     const res = await prisma.resumeSection.create({
       data: {
@@ -637,11 +848,7 @@ export const addExperience = async (
       throw new Error("Not authenticated");
     }
 
-    const owned = await prisma.resume.findUnique({
-      where: { id: data.resumeId!, profile: { userId: user.id } },
-      select: { id: true },
-    });
-    if (!owned) throw new Error("Resume not found or access denied");
+    await assertResumeOwnership(data.resumeId!, user.id);
 
     if (!data.sectionId && !data.sectionTitle) {
       throw new Error("SectionTitle is required.");
@@ -660,6 +867,7 @@ export const addExperience = async (
     const experience = await prisma.resumeSection.update({
       where: {
         id: section ? section.id : data.sectionId,
+        resumeId: data.resumeId!,
       },
       data: {
         workExperiences: {
@@ -732,11 +940,7 @@ export const addEducation = async (
       throw new Error("Not authenticated");
     }
 
-    const owned = await prisma.resume.findUnique({
-      where: { id: data.resumeId!, profile: { userId: user.id } },
-      select: { id: true },
-    });
-    if (!owned) throw new Error("Resume not found or access denied");
+    await assertResumeOwnership(data.resumeId!, user.id);
 
     const section = !data.sectionId
       ? await prisma.resumeSection.create({
@@ -751,6 +955,7 @@ export const addEducation = async (
     const education = await prisma.resumeSection.update({
       where: {
         id: section ? section.id : data.sectionId,
+        resumeId: data.resumeId!,
       },
       data: {
         educations: {
@@ -825,11 +1030,7 @@ export const addCertification = async (
       throw new Error("Not authenticated");
     }
 
-    const owned = await prisma.resume.findUnique({
-      where: { id: data.resumeId!, profile: { userId: user.id } },
-      select: { id: true },
-    });
-    if (!owned) throw new Error("Resume not found or access denied");
+    await assertResumeOwnership(data.resumeId!, user.id);
 
     const section = !data.sectionId
       ? await prisma.resumeSection.create({
@@ -844,6 +1045,7 @@ export const addCertification = async (
     const result = await prisma.resumeSection.update({
       where: {
         id: section ? section.id : data.sectionId,
+        resumeId: data.resumeId!,
       },
       data: {
         licenseOrCertifications: {
@@ -903,11 +1105,7 @@ export const addSkillsSection = async (
     const user = await getCurrentUser();
     if (!user) throw new Error("Not authenticated");
 
-    const owned = await prisma.resume.findUnique({
-      where: { id: data.resumeId, profile: { userId: user.id } },
-      select: { id: true },
-    });
-    if (!owned) throw new Error("Resume not found or access denied");
+    await assertResumeOwnership(data.resumeId, user.id);
 
     const section = await prisma.resumeSection.create({
       data: {

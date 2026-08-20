@@ -13,7 +13,7 @@ import {
   DialogTrigger,
 } from "../ui/dialog";
 import { Input } from "../ui/input";
-import { toast } from "../ui/use-toast";
+import { toastError } from "@/lib/toast";
 import { ContactInfo, Resume, ResumeSection, SectionType } from "@/models/profile.model";
 import { CvImportResponse } from "@/models/ai.schemas";
 import { AiModel, defaultModel } from "@/models/ai.model";
@@ -160,11 +160,10 @@ function ImportCvFromPdf({ resume }: ImportCvFromPdfProps) {
     } else if (hasEntities) {
       setStep("entities");
     } else {
-      toast({
-        variant: "destructive",
-        title: "Nothing found",
-        description: "The AI couldn't extract any contact info, summary, experience, or education from this CV.",
-      });
+      toastError(
+        "The AI couldn't extract any contact info, summary, experience, or education from this CV.",
+        "Nothing found",
+      );
     }
   };
 
@@ -179,11 +178,7 @@ function ImportCvFromPdf({ resume }: ImportCvFromPdfProps) {
   const handleExtract = async () => {
     if (!file) return;
     if (!file.name.toLowerCase().endsWith(".pdf")) {
-      toast({
-        variant: "destructive",
-        title: "Error!",
-        description: "Only PDF files are supported.",
-      });
+      toastError("Only PDF files are supported.");
       return;
     }
 
@@ -200,22 +195,14 @@ function ImportCvFromPdf({ resume }: ImportCvFromPdfProps) {
       const response = await res.json();
 
       if (!res.ok || !response.success) {
-        toast({
-          variant: "destructive",
-          title: "Error!",
-          description: response.error || "Failed to import CV.",
-        });
+        toastError(response.error || "Failed to import CV.");
         return;
       }
 
       setDialogOpen(false);
       applyExtraction(response.data as CvImportResponse);
     } catch {
-      toast({
-        variant: "destructive",
-        title: "Error!",
-        description: "Failed to import CV. Please try again.",
-      });
+      toastError("Failed to import CV. Please try again.");
     } finally {
       setIsExtracting(false);
     }
@@ -270,13 +257,13 @@ function ImportCvFromPdf({ resume }: ImportCvFromPdfProps) {
             <>
               {ollamaConnected === true && (
                 <div className="flex items-center gap-1 text-green-600 text-sm">
-                  <CheckCircle className="h-4 w-4 flex-shrink-0" />
+                  <CheckCircle className="h-4 w-4 shrink-0" />
                   <span>Ollama is connected</span>
                 </div>
               )}
               {ollamaConnected === false && (
                 <div className="flex items-center gap-1 text-red-600 text-sm">
-                  <XCircle className="h-4 w-4 flex-shrink-0" />
+                  <XCircle className="h-4 w-4 shrink-0" />
                   <span>{connectionError}</span>
                 </div>
               )}

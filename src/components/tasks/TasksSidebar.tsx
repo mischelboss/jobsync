@@ -28,7 +28,7 @@ function TasksSidebar({
   return (
     <div
       className={cn(
-        "relative border-r py-4 hidden md:flex flex-col h-full transition-all duration-200",
+        "relative border-r py-4 hidden md:flex flex-col sticky top-4 self-start transition-all duration-200 -ml-3",
         collapsed ? "w-0 overflow-visible" : "w-48",
       )}
     >
@@ -66,26 +66,28 @@ function TasksSidebar({
                 </span>
               </button>
             </li>
-            {activityTypes.map((type) => (
-              <li key={type.id}>
-                <button
-                  onClick={() => onFilterChange(type.id)}
-                  className={cn(
-                    "w-full text-left px-3 py-2 rounded-md text-sm transition-colors",
-                    "hover:bg-accent hover:text-accent-foreground",
-                    selectedFilter === type.id &&
-                      "bg-accent text-accent-foreground font-medium",
-                  )}
-                >
-                  <span className="flex justify-between items-center">
-                    <span className="truncate">{type.label}</span>
-                    <span className="text-muted-foreground text-xs">
-                      {type.taskCount}
+            {activityTypes
+              .filter((type) => type.taskCount > 0)
+              .map((type) => (
+                <li key={type.id}>
+                  <button
+                    onClick={() => onFilterChange(type.id)}
+                    className={cn(
+                      "w-full text-left px-3 py-2 rounded-md text-sm transition-colors",
+                      "hover:bg-accent hover:text-accent-foreground",
+                      selectedFilter === type.id &&
+                        "bg-accent text-accent-foreground font-medium",
+                    )}
+                  >
+                    <span className="flex justify-between items-center">
+                      <span className="truncate">{type.label}</span>
+                      <span className="text-muted-foreground text-xs">
+                        {type.taskCount}
+                      </span>
                     </span>
-                  </span>
-                </button>
-              </li>
-            ))}
+                  </button>
+                </li>
+              ))}
           </ul>
         </>
       )}

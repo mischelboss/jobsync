@@ -8,28 +8,39 @@ import {
   useEffect,
   ReactNode,
 } from "react";
-import { differenceInMilliseconds, differenceInMinutes } from "date-fns";
+import { differenceInMilliseconds } from "date-fns";
 import {
+  endBreak as endBreakAction,
   getCurrentActivity,
   startActivityById,
+  startBreak as startBreakAction,
   stopActivityById,
+  updateBreakLength,
 } from "@/actions/activity.actions";
 import { Activity, ActivityType } from "@/models/activity.model";
-import { toast } from "@/components/ui/use-toast";
+import { toastSuccess, toastError } from "@/lib/toast";
 import { APP_CONSTANTS } from "@/lib/constants";
 
 interface ActivityContextType {
   currentActivity: Activity | undefined;
   timeElapsed: number;
   isLoading: boolean;
+  isOnBreak: boolean;
   startActivity: (activityId: string) => Promise<boolean>;
   stopActivity: (autoStop?: boolean) => Promise<boolean>;
-  refreshCurrentActivity: () => Promise<void>;
+  startBreak: (minutes: number) => Promise<void>;
+  endBreak: () => Promise<void>;
+  setBreakLength: (minutes: number) => Promise<void>;
+  refreshCurrentActivity: () => Promise<Activity | undefined>;
 }
 
 const ActivityContext = createContext<ActivityContextType | undefined>(
   undefined
 );
+
+// The 8h cap is wall clock (see plan decision 7); only the display is net.
+const netElapsed = (wallMs: number, breakMinutes: number) =>
+  Math.max(wallMs - breakMinutes * 60_000, 0);
 
 export function ActivityProvider({ children }: { children: ReactNode }) {
   const [currentActivity, setCurrentActivity] = useState<Activity>();
@@ -38,6 +49,12 @@ export function ActivityProvider({ children }: { children: ReactNode }) {
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const startTimeRef = useRef<number | null>(null);
   const isMountedRef = useRef(true);
+  const breakMinutesRef = useRef(0);
+  const stopActivityRef = useRef<((autoStop?: boolean) => Promise<boolean>) | null>(null);
+
+  useEffect(() => {
+    breakMinutesRef.current = currentActivity?.breakMinutes ?? 0;
+  }, [currentActivity]);
 
   const stopTimer = useCallback(() => {
     if (timerRef.current) {
@@ -60,7 +77,7 @@ export function ActivityProvider({ children }: { children: ReactNode }) {
       return false; // Signal that auto-stop is needed
     }
 
-    setTimeElapsed(initialElapsed);
+    setTimeElapsed(netElapsed(initialElapsed, breakMinutesRef.current));
 
     timerRef.current = setInterval(() => {
       if (!startTimeRef.current) return;
@@ -74,56 +91,79 @@ export function ActivityProvider({ children }: { children: ReactNode }) {
           clearInterval(timerRef.current);
           timerRef.current = null;
         }
+        // Without this the 8h backstop only fires on mount or a tab switch, so
+        // a break forgotten in a visible tab locks the app for good.
+        stopActivityRef.current?.(true);
         return;
       }
 
-      setTimeElapsed(elapsed);
+      setTimeElapsed(netElapsed(elapsed, breakMinutesRef.current));
     }, 1000);
 
     return true; // Timer started successfully
+  }, [stopTimer]);
+
+  const refreshCurrentActivity = useCallback(async (): Promise<
+    Activity | undefined
+  > => {
+    const { activity, success } = await getCurrentActivity();
+    if (!isMountedRef.current) return undefined;
+
+    if (success && activity) {
+      setCurrentActivity(activity);
+      return activity;
+    }
+
+    setCurrentActivity(undefined);
+    stopTimer();
+    return undefined;
   }, [stopTimer]);
 
   const stopActivity = useCallback(
     async (autoStop: boolean = false): Promise<boolean> => {
       if (!currentActivity) return false;
 
-      const now = new Date();
-      const maxDurationMinutes =
-        APP_CONSTANTS.ACTIVITY_MAX_DURATION_MS / (1000 * 60);
-      const duration = Math.min(
-        differenceInMinutes(now, currentActivity.startTime),
-        maxDurationMinutes
-      );
-
-      const { success, message } = await stopActivityById(
+      const { success, discarded, message } = await stopActivityById(
         currentActivity.id!,
-        now,
-        duration
+        new Date(),
       );
 
       if (!isMountedRef.current) return success;
 
-      if (success) {
-        stopTimer();
-        setCurrentActivity(undefined);
-        toast({
-          variant: "success",
-          description: autoStop
-            ? `Activity auto-stopped after reaching maximum duration of ${maxDurationMinutes / 60} hours`
-            : "Activity stopped successfully",
-        });
-        return true;
-      } else {
-        toast({
-          variant: "destructive",
-          title: "Error!",
-          description: message,
-        });
+      if (!success) {
+        // The running activity is a per-user singleton, so another session may
+        // have already ended it — resync so a stale copy can't leave an
+        // undismissable banner.
+        await refreshCurrentActivity();
+        toastError(message);
         return false;
       }
+
+      stopTimer();
+      setCurrentActivity(undefined);
+
+      if (discarded) {
+        toastError(
+          `Activity not saved because duration was less than ${APP_CONSTANTS.ACTIVITY_MIN_DURATION_MINUTES} minutes`
+        );
+        return true;
+      }
+
+      toastSuccess(
+        autoStop
+          ? `Activity auto-stopped after reaching maximum duration of ${
+              APP_CONSTANTS.ACTIVITY_MAX_DURATION_MINUTES / 60
+            } hours`
+          : "Activity stopped successfully"
+      );
+      return true;
     },
-    [currentActivity, stopTimer]
+    [currentActivity, stopTimer, refreshCurrentActivity]
   );
+
+  useEffect(() => {
+    stopActivityRef.current = stopActivity;
+  }, [stopActivity]);
 
   const startActivity = useCallback(
     async (activityId: string): Promise<boolean> => {
@@ -137,18 +177,11 @@ export function ActivityProvider({ children }: { children: ReactNode }) {
 
       if (success && newActivity) {
         setCurrentActivity(newActivity as Activity);
-        toast({
-          variant: "success",
-          description: "Activity started successfully",
-        });
+        toastSuccess("Activity started successfully");
         setIsLoading(false);
         return true;
       } else {
-        toast({
-          variant: "destructive",
-          title: "Error!",
-          description: message,
-        });
+        toastError(message);
         setIsLoading(false);
         return false;
       }
@@ -156,17 +189,61 @@ export function ActivityProvider({ children }: { children: ReactNode }) {
     []
   );
 
-  const refreshCurrentActivity = useCallback(async () => {
-    const { activity, success } = await getCurrentActivity();
+  const startBreak = useCallback(
+    async (minutes: number) => {
+      if (!currentActivity) return;
+
+      const { activity, success, message } = await startBreakAction(
+        currentActivity.id!,
+        minutes,
+      );
+
+      if (!isMountedRef.current) return;
+
+      if (success && activity) {
+        setCurrentActivity(activity as Activity);
+        return;
+      }
+
+      toastError(message);
+      await refreshCurrentActivity();
+    },
+    [currentActivity, refreshCurrentActivity],
+  );
+
+  const endBreak = useCallback(async () => {
+    if (!currentActivity) return;
+
+    const { activity, success, message } = await endBreakAction(
+      currentActivity.id!,
+    );
+
     if (!isMountedRef.current) return;
 
     if (success && activity) {
-      setCurrentActivity(activity);
-    } else {
-      setCurrentActivity(undefined);
-      stopTimer();
+      setCurrentActivity(activity as Activity);
+      return;
     }
-  }, [stopTimer]);
+
+    toastError(message);
+    await refreshCurrentActivity();
+  }, [currentActivity, refreshCurrentActivity]);
+
+  // Optimistic: the ring must redraw on the click, not a round trip later.
+  const setBreakLength = useCallback(
+    async (minutes: number) => {
+      if (!currentActivity) return;
+
+      setCurrentActivity({ ...currentActivity, breakPlannedMins: minutes });
+
+      const { success } = await updateBreakLength(currentActivity.id!, minutes);
+
+      if (!isMountedRef.current || success) return;
+
+      await refreshCurrentActivity();
+    },
+    [currentActivity, refreshCurrentActivity],
+  );
 
   // Handle timer when currentActivity changes
   useEffect(() => {
@@ -183,22 +260,35 @@ export function ActivityProvider({ children }: { children: ReactNode }) {
 
   // Handle visibility change to sync timer when tab becomes visible
   useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === "visible" && currentActivity && startTimeRef.current) {
-        const elapsed = differenceInMilliseconds(Date.now(), startTimeRef.current);
-        if (elapsed >= APP_CONSTANTS.ACTIVITY_MAX_DURATION_MS) {
-          stopActivity(true);
-        } else {
-          setTimeElapsed(elapsed);
-        }
+    const resync = () => {
+      if (!currentActivity) return;
+
+      // Break state is per-user and can change in another tab or window; trust
+      // the server copy over the local one on every return to the foreground.
+      refreshCurrentActivity();
+
+      if (!startTimeRef.current) return;
+
+      const elapsed = differenceInMilliseconds(Date.now(), startTimeRef.current);
+      if (elapsed >= APP_CONSTANTS.ACTIVITY_MAX_DURATION_MS) {
+        stopActivity(true);
+      } else {
+        setTimeElapsed(netElapsed(elapsed, breakMinutesRef.current));
       }
     };
 
+    const handleVisibilityChange = () => {
+      if (document.visibilityState !== "visible") return;
+      resync();
+    };
+
     document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("focus", resync);
     return () => {
       document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("focus", resync);
     };
-  }, [currentActivity, stopActivity]);
+  }, [currentActivity, stopActivity, refreshCurrentActivity]);
 
   // Fetch current activity on mount and cleanup
   useEffect(() => {
@@ -217,8 +307,12 @@ export function ActivityProvider({ children }: { children: ReactNode }) {
         currentActivity,
         timeElapsed,
         isLoading,
+        isOnBreak: Boolean(currentActivity?.breakStartedAt),
         startActivity,
         stopActivity,
+        startBreak,
+        endBreak,
+        setBreakLength,
         refreshCurrentActivity,
       }}
     >

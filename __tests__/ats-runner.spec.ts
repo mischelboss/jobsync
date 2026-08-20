@@ -13,10 +13,10 @@ vi.mock("@prisma/client", () => {
     resume: { findUnique: vi.fn() },
     userSettings: { findUnique: vi.fn() },
     job: { findMany: vi.fn(), create: vi.fn() },
-    jobTitle: { findFirst: vi.fn(), create: vi.fn() },
-    location: { findFirst: vi.fn(), create: vi.fn() },
-    company: { findFirst: vi.fn(), create: vi.fn() },
-    jobSource: { findFirst: vi.fn(), create: vi.fn() },
+    jobTitle: { findUnique: vi.fn(), create: vi.fn() },
+    location: { findUnique: vi.fn(), create: vi.fn() },
+    company: { findUnique: vi.fn(), create: vi.fn() },
+    jobSource: { findUnique: vi.fn(), create: vi.fn() },
     jobStatus: { findFirst: vi.fn(), create: vi.fn() },
   };
   return {
@@ -118,10 +118,10 @@ describe("runAutomation (lever)", () => {
     });
     (prisma.job.findMany as any).mockResolvedValue([]);
     (prisma.job.create as any).mockResolvedValue({});
-    (prisma.jobTitle.findFirst as any).mockResolvedValue({ id: "jt" });
-    (prisma.location.findFirst as any).mockResolvedValue({ id: "loc" });
-    (prisma.company.findFirst as any).mockResolvedValue({ id: "co" });
-    (prisma.jobSource.findFirst as any).mockResolvedValue({ id: "src" });
+    (prisma.jobTitle.findUnique as any).mockResolvedValue({ id: "jt" });
+    (prisma.location.findUnique as any).mockResolvedValue({ id: "loc" });
+    (prisma.company.findUnique as any).mockResolvedValue({ id: "co" });
+    (prisma.jobSource.findUnique as any).mockResolvedValue({ id: "src" });
     (prisma.jobStatus.findFirst as any).mockResolvedValue({ id: "st" });
 
     (generateText as any).mockResolvedValue({
@@ -169,5 +169,39 @@ describe("runAutomation (lever)", () => {
     expect(result.status).toBe("failed");
     expect(result.errorMessage).toBe("no_companies");
     expect((searchLeverJobs as any).mock.calls.length).toBe(0);
+  });
+
+  it("strips HTML and decodes entities from the resume before matching", async () => {
+    (prisma.resume.findUnique as any).mockResolvedValue({
+      id: "resume1",
+      title: "My Resume",
+      ContactInfo: null,
+      ResumeSections: [
+        {
+          sectionType: "experience",
+          workExperiences: [
+            {
+              description: "<p>Sales &amp; Marketing</p>",
+              startDate: new Date("2020-01-01"),
+              endDate: null,
+              Company: { label: "Acme" },
+              jobTitle: { label: "Engineer" },
+              location: { label: "Remote" },
+            },
+          ],
+        },
+      ],
+    });
+    (searchLeverJobs as any).mockResolvedValue({
+      jobs: [makeJob("Frontend Engineer", "React")],
+      errors: [],
+    });
+
+    await runAutomation(leverAutomation);
+
+    const prompt = (generateText as any).mock.calls[0][0].prompt as string;
+    expect(prompt).toContain("Sales & Marketing");
+    expect(prompt).not.toContain("&amp;");
+    expect(prompt).not.toContain("<p>");
   });
 });

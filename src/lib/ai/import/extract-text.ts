@@ -29,7 +29,7 @@ export function sniffFileType(buf: Buffer): "pdf" | "docx" | null {
 }
 
 // Parse ZIP Central Directory to sum uncompressed sizes and count entries
-function preflightZip(buf: Buffer): { entries: number; uncompressedBytes: number } {
+export function preflightZip(buf: Buffer): { entries: number; uncompressedBytes: number } {
   const EOCD_SIG = 0x06054b50;
   const CD_SIG = 0x02014b50;
 

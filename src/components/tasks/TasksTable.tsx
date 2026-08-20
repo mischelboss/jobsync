@@ -18,7 +18,14 @@ import {
   ArrowRight,
   ArrowUp,
   Flame,
+  AlignLeft,
 } from "lucide-react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "../ui/tooltip";
 import { cn } from "@/lib/utils";
 import { StatusBadge } from "../StatusBadge";
 import { TASK_STATUS_BADGE_COLORS } from "@/lib/badge-colors";
@@ -45,8 +52,14 @@ import {
 } from "../ui/dropdown-menu";
 import { Button } from "../ui/button";
 import { useState } from "react";
-import { Task, TASK_STATUSES, TaskStatus } from "@/models/task.model";
+import {
+  Task,
+  TASK_STATUSES,
+  TaskGroupBy,
+  TaskStatus,
+} from "@/models/task.model";
 import { DeleteAlertDialog } from "../DeleteAlertDialog";
+import { getDescriptionExcerpt, hasDescription } from "@/lib/tasks/description";
 
 type TasksTableProps = {
   tasks: Task[];
@@ -54,7 +67,7 @@ type TasksTableProps = {
   editTask: (id: string) => void;
   onChangeTaskStatus: (id: string, status: TaskStatus) => void;
   onStartActivity: (id: string) => void;
-  groupBy?: "none" | "createdDate" | "dueDate" | "updatedDate" | "activityType";
+  groupBy?: TaskGroupBy;
 };
 
 type PriorityLevel = "low" | "medium" | "high" | "critical";
@@ -212,7 +225,7 @@ function TasksTable({
             )
           }
           className={cn(
-            "h-5 w-5 rounded border flex items-center justify-center transition-colors",
+            "h-5 w-5 rounded-sm border flex items-center justify-center transition-colors",
             task.status === "complete"
               ? "bg-green-500 border-green-500 text-white"
               : "border-gray-300 hover:border-gray-400",
@@ -232,13 +245,29 @@ function TasksTable({
           task.status === "complete" && "line-through",
         )}
       >
-        <button
-          onClick={() => editTask(task.id)}
-          className="text-left hover:underline cursor-pointer"
-          aria-label={`Edit ${task.title}`}
-        >
-          {task.title}
-        </button>
+        <span className="inline-flex items-center gap-1.5">
+          <button
+            onClick={() => editTask(task.id)}
+            className="text-left hover:underline cursor-pointer"
+            aria-label={`Edit ${task.title}`}
+          >
+            {task.title}
+          </button>
+          {hasDescription(task.description) && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <AlignLeft
+                  className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
+                  aria-label="Has description"
+                  data-testid="task-description-indicator"
+                />
+              </TooltipTrigger>
+              <TooltipContent className="max-w-sm text-xs">
+                {getDescriptionExcerpt(task.description)}
+              </TooltipContent>
+            </Tooltip>
+          )}
+        </span>
       </TableCell>
       <TableCell className="py-1 px-2">
         {task.activityType?.label || "—"}
@@ -380,6 +409,33 @@ function TasksTable({
     </TableHeader>
   );
 
+  const renderGroupedTables = (entries: [string, Task[]][]) => (
+    <TooltipProvider delayDuration={300}>
+      {entries.map(([label, groupTasks]) => (
+        <div key={label} className="mb-6">
+          <h3 className="text-sm font-semibold mb-2 px-2 py-1">
+            {label} ({groupTasks.length})
+          </h3>
+          <Table>
+            {renderTableHeader()}
+            <TableBody>{groupTasks.map(renderTaskRow)}</TableBody>
+          </Table>
+        </div>
+      ))}
+      <DeleteAlertDialog
+        pageTitle="task"
+        open={alertOpen}
+        onOpenChange={setAlertOpen}
+        onDelete={() => deleteTask(taskIdToDelete)}
+      />
+    </TooltipProvider>
+  );
+
+  const formatDateLabel = (dateStr: string) => {
+    const date = parse(dateStr, "yyyy-MM-dd", new Date());
+    return isToday(date) ? "Today" : format(date, "MMM d, yyyy");
+  };
+
   if (tasks.length === 0) {
     return (
       <div className="text-center py-8 text-muted-foreground">
@@ -399,139 +455,33 @@ function TasksTable({
       "No Due Date",
     ];
 
-    return (
-      <>
-        {groupOrder.map((group) => {
-          const groupTasks = groupedTasks[group];
-          if (groupTasks.length === 0) return null;
-
-          return (
-            <div key={group} className="mb-6">
-              <h3
-                className={cn(
-                  "text-sm font-semibold mb-2 px-2 py-1",
-                  group === "Overdue",
-                  group === "Today",
-                  group === "Tomorrow",
-                )}
-              >
-                {group} ({groupTasks.length})
-              </h3>
-              <Table>
-                {renderTableHeader()}
-                <TableBody>{groupTasks.map(renderTaskRow)}</TableBody>
-              </Table>
-            </div>
-          );
-        })}
-        <DeleteAlertDialog
-          pageTitle="task"
-          open={alertOpen}
-          onOpenChange={setAlertOpen}
-          onDelete={() => deleteTask(taskIdToDelete)}
-        />
-      </>
+    return renderGroupedTables(
+      groupOrder
+        .filter((group) => groupedTasks[group].length > 0)
+        .map((group) => [group, groupedTasks[group]]),
     );
   }
 
   if (groupBy === "activityType") {
-    const groupedTasks = groupTasksByActivityType(tasks);
-
-    return (
-      <>
-        {Object.entries(groupedTasks).map(([activityType, groupTasks]) => (
-          <div key={activityType} className="mb-6">
-            <h3 className="text-sm font-semibold mb-2 px-2 py-1">
-              {activityType} ({groupTasks.length})
-            </h3>
-            <Table>
-              {renderTableHeader()}
-              <TableBody>{groupTasks.map(renderTaskRow)}</TableBody>
-            </Table>
-          </div>
-        ))}
-        <DeleteAlertDialog
-          pageTitle="task"
-          open={alertOpen}
-          onOpenChange={setAlertOpen}
-          onDelete={() => deleteTask(taskIdToDelete)}
-        />
-      </>
-    );
+    return renderGroupedTables(Object.entries(groupTasksByActivityType(tasks)));
   }
 
-  if (groupBy === "createdDate") {
-    const groupedTasks = groupTasksByCreatedDate(tasks);
-    const sortedDates = Object.keys(groupedTasks).sort().reverse();
+  if (groupBy === "createdDate" || groupBy === "updatedDate") {
+    const groupedTasks =
+      groupBy === "createdDate"
+        ? groupTasksByCreatedDate(tasks)
+        : groupTasksByUpdatedDate(tasks);
 
-    return (
-      <>
-        {sortedDates.map((dateStr) => {
-          const groupTasks = groupedTasks[dateStr];
-          const date = parse(dateStr, "yyyy-MM-dd", new Date());
-          const displayDate = isToday(date)
-            ? "Today"
-            : format(date, "MMM d, yyyy");
-
-          return (
-            <div key={dateStr} className="mb-6">
-              <h3 className="text-sm font-semibold mb-2 px-2 py-1">
-                {displayDate} ({groupTasks.length})
-              </h3>
-              <Table>
-                {renderTableHeader()}
-                <TableBody>{groupTasks.map(renderTaskRow)}</TableBody>
-              </Table>
-            </div>
-          );
-        })}
-        <DeleteAlertDialog
-          pageTitle="task"
-          open={alertOpen}
-          onOpenChange={setAlertOpen}
-          onDelete={() => deleteTask(taskIdToDelete)}
-        />
-      </>
-    );
-  }
-
-  if (groupBy === "updatedDate") {
-    const groupedTasks = groupTasksByUpdatedDate(tasks);
-    const sortedDates = Object.keys(groupedTasks).sort().reverse();
-
-    return (
-      <>
-        {sortedDates.map((dateStr) => {
-          const groupTasks = groupedTasks[dateStr];
-          const date = parse(dateStr, "yyyy-MM-dd", new Date());
-          const displayDate = isToday(date)
-            ? "Today"
-            : format(date, "MMM d, yyyy");
-
-          return (
-            <div key={dateStr} className="mb-6">
-              <h3 className="text-sm font-semibold mb-2 px-2 py-1">
-                {displayDate} ({groupTasks.length})
-              </h3>
-              <Table>
-                {renderTableHeader()}
-                <TableBody>{groupTasks.map(renderTaskRow)}</TableBody>
-              </Table>
-            </div>
-          );
-        })}
-        <DeleteAlertDialog
-          pageTitle="task"
-          open={alertOpen}
-          onOpenChange={setAlertOpen}
-          onDelete={() => deleteTask(taskIdToDelete)}
-        />
-      </>
+    return renderGroupedTables(
+      Object.keys(groupedTasks)
+        .sort()
+        .reverse()
+        .map((dateStr) => [formatDateLabel(dateStr), groupedTasks[dateStr]]),
     );
   }
 
   return (
-    <>
+    <TooltipProvider delayDuration={300}>
       <Table>
         {renderTableHeader()}
         <TableBody>{tasks.map(renderTaskRow)}</TableBody>
@@ -542,7 +492,7 @@ function TasksTable({
         onOpenChange={setAlertOpen}
         onDelete={() => deleteTask(taskIdToDelete)}
       />
-    </>
+    </TooltipProvider>
   );
 }
 

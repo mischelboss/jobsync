@@ -9,6 +9,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -16,7 +17,7 @@ import {
 import { ActivityForm } from "./ActivityForm";
 import { getActivitiesList } from "@/actions/activity.actions";
 import { Activity } from "@/models/activity.model";
-import { toast } from "../ui/use-toast";
+import { toastError } from "@/lib/toast";
 import Loading from "../Loading";
 import { APP_CONSTANTS } from "@/lib/constants";
 import { RecordsCount } from "../RecordsCount";
@@ -55,18 +56,10 @@ function ActivitiesContainer() {
           setTotalActivities(total);
           setPage(page);
         } else {
-          toast({
-            variant: "destructive",
-            title: "Error!",
-            description: message,
-          });
+          toastError(message);
         }
       } catch (error) {
-        toast({
-          variant: "destructive",
-          title: "Error!",
-          description: "Failed to load activities. Please try again.",
-        });
+        toastError("Failed to load activities. Please try again.");
       } finally {
         setInitialLoading(false);
         setLoadingMore(false);
@@ -85,6 +78,7 @@ function ActivitiesContainer() {
       if (success) {
         reloadActivities();
       }
+      return success;
     });
   };
 
@@ -154,7 +148,7 @@ function ActivitiesContainer() {
             <RecordsCount count={activitiesList.length} total={totalActivities} label="activities" />
           )}
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
           <SearchInput
             value={searchTerm}
             onChange={setSearchTerm}
@@ -177,6 +171,9 @@ function ActivitiesContainer() {
             <DialogContent className="sm:max-w-[725px] max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>Add New Activity</DialogTitle>
+                <DialogDescription>
+                  Log a new activity to track your time and progress.
+                </DialogDescription>
               </DialogHeader>
               <div className="p-4">
                 <ActivityForm

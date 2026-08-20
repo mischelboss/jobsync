@@ -2,6 +2,7 @@
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogOverlay,
   DialogTitle,
@@ -17,7 +18,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { Question } from "@/models/question.model";
 import { Tag } from "@/models/job.model";
 import { z } from "zod";
-import { toast } from "../ui/use-toast";
+import { toastSuccess, toastError } from "@/lib/toast";
 import {
   Form,
   FormControl,
@@ -54,7 +55,7 @@ export function QuestionForm({
     resolver: zodResolver(AddQuestionFormSchema),
     defaultValues: {
       question: "",
-      answer: "",
+      answer: "TBD",
       tagIds: [],
     },
   });
@@ -84,7 +85,7 @@ export function QuestionForm({
     } else {
       reset({
         question: "",
-        answer: "",
+        answer: "TBD",
         tagIds: [],
       });
     }
@@ -97,25 +98,21 @@ export function QuestionForm({
         : await createQuestion(data);
 
       if (success) {
-        toast({
-          variant: "success",
-          description: `Question has been ${editQuestion ? "updated" : "created"} successfully`,
-        });
+        toastSuccess(`Question has been ${editQuestion ? "updated" : "created"} successfully`);
         reset();
         setDialogOpen(false);
         resetEditQuestion();
         onQuestionSaved();
       } else {
-        toast({
-          variant: "destructive",
-          title: "Error!",
-          description: message,
-        });
+        toastError(message);
       }
     });
   }
 
   const pageTitle = editQuestion ? "Edit Question" : "Add Question";
+  const pageDescription = editQuestion
+    ? "Update this question in your question bank."
+    : "Add a question to your question bank.";
 
   const closeDialog = () => {
     reset();
@@ -131,6 +128,7 @@ export function QuestionForm({
             <DialogTitle data-testid="question-form-dialog-title">
               {pageTitle}
             </DialogTitle>
+            <DialogDescription>{pageDescription}</DialogDescription>
           </DialogHeader>
           <Form {...form}>
             <form

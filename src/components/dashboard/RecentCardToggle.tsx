@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatusBadge } from "@/components/StatusBadge";
 import { getJobStatusBadgeColor } from "@/lib/badge-colors";
 import { cn } from "@/lib/utils";
+import { APP_CONSTANTS } from "@/lib/constants";
+import { usePersistedTabIndex } from "@/hooks/usePersistedTabIndex";
 import { useActivity } from "@/context/ActivityContext";
 import { useActivitySwitchConfirm } from "@/hooks/useActivitySwitchConfirm";
 import { JobResponse } from "@/models/job.model";
@@ -71,25 +72,28 @@ export default function RecentCardToggle({
   jobs,
   activities,
 }: RecentCardToggleProps) {
-  const [activeIndex, setActiveIndex] = useState(0);
+  const [activeIndex, selectTab] = usePersistedTabIndex(
+    APP_CONSTANTS.DASHBOARD_RECENT_CARD_STORAGE_KEY,
+    tabs,
+  );
   const { startActivity } = useActivity();
   const { requestStart, confirmDialog } = useActivitySwitchConfirm();
 
   return (
-    <Card className="mb-2">
+    <Card className="mb-2 @3xl/main:absolute @3xl/main:inset-0 @3xl/main:mb-0 @3xl/main:flex @3xl/main:flex-col">
       <CardHeader>
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-green-600">
+        <div className="flex items-center justify-between gap-2">
+          <CardTitle className="text-lg text-green-600 min-w-0 truncate">
             Recent {tabs[activeIndex]}
           </CardTitle>
           <div
-            className="flex rounded-md border text-xs"
+            className="flex shrink-0 rounded-md border text-xs"
             data-testid="recent-card-toggle-group"
           >
             {tabs.map((tab, index) => (
               <button
                 key={tab}
-                onClick={() => setActiveIndex(index)}
+                onClick={() => selectTab(index)}
                 className={cn(
                   "px-2 py-1 transition-colors",
                   index === 0 && "rounded-l-md",
@@ -105,9 +109,9 @@ export default function RecentCardToggle({
           </div>
         </div>
       </CardHeader>
-      <CardContent className="grid gap-6">
+      <CardContent className="grid auto-rows-max gap-6 px-4 @3xl/main:min-h-0 @3xl/main:flex-1 @3xl/main:overflow-y-auto">
         {activeIndex === 0
-          ? groupJobsByDate(jobs.slice(0, 5)).map(([date, dateJobs]) => (
+          ? groupJobsByDate(jobs).map(([date, dateJobs]) => (
               <div key={date} className="grid gap-4">
                 <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   {date}
@@ -143,7 +147,7 @@ export default function RecentCardToggle({
                 ))}
               </div>
             ))
-          : groupActivitiesByDate(activities.slice(0, 5)).map(([date, dateActivities]) => (
+          : groupActivitiesByDate(activities).map(([date, dateActivities]) => (
               <div key={date} className="grid gap-4">
                 <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   {date}
@@ -152,17 +156,19 @@ export default function RecentCardToggle({
                   {dateActivities.map((activity) => (
                     <div
                       key={activity.id}
-                      className="group relative flex items-center gap-1"
+                      data-testid="recent-activity-row"
+                      className="group relative flex items-center gap-2"
                     >
                       <Button
                         title="Start Activity"
+                        data-testid="recent-activity-start-btn"
                         size="icon"
                         variant="ghost"
                         onClick={() => requestStart(() => startActivity(activity.id))}
-                        className="h-5 w-5 shrink-0 opacity-0 group-hover:opacity-100 group-hover:pointer-events-auto transition-opacity duration-300"
+                        className="h-9 w-9 shrink-0 opacity-0 group-hover:opacity-100 group-hover:pointer-events-auto transition-opacity duration-300"
                       >
                         <span>
-                          <CirclePlay className="text-green-600 h-3.5 w-3.5" />
+                          <CirclePlay className="text-green-600 h-6 w-6" />
                         </span>
                       </Button>
                       <div className="grid gap-1 min-w-0 flex-1">

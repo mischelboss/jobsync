@@ -2,13 +2,13 @@ import { useForm } from "react-hook-form";
 import {
   Dialog,
   DialogContent,
-  DialogFooter,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "../ui/dialog";
+import { FormDialogFooter } from "../FormDialogFooter";
 import { AddSummarySectionFormSchema } from "@/models/addSummaryForm.schema";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Button } from "../ui/button";
 import {
   Form,
   FormControl,
@@ -18,9 +18,8 @@ import {
   FormMessage,
 } from "../ui/form";
 import { Input } from "../ui/input";
-import { Loader } from "lucide-react";
 import { useEffect, useTransition } from "react";
-import { toast } from "../ui/use-toast";
+import { toastSuccess, toastError } from "@/lib/toast";
 import { z } from "zod";
 import TiptapEditor from "../TiptapEditor";
 import {
@@ -52,6 +51,9 @@ function AddResumeSummary({
   const [isPending, startTransition] = useTransition();
 
   const pageTitle = summaryToEdit ? "Edit Summary" : "Add Summary";
+  const pageDescription = summaryToEdit
+    ? "Update the professional summary on your resume."
+    : "Add a professional summary to your resume.";
 
   const form = useForm<z.infer<typeof AddSummarySectionFormSchema>>({
     resolver: zodResolver(AddSummarySectionFormSchema),
@@ -96,20 +98,13 @@ function AddResumeSummary({
         ? await updateResumeSummary(data)
         : await addResumeSummary(data);
       if (!res.success) {
-        toast({
-          variant: "destructive",
-          title: "Error!",
-          description: res.message,
-        });
+        toastError(res.message);
       } else {
         reset();
         setDialogOpen(false);
-        toast({
-          variant: "success",
-          description: `Summary has been ${
-            summaryToEdit ? "updated" : "created"
-          } successfully`,
-        });
+        toastSuccess(`Summary has been ${
+          summaryToEdit ? "updated" : "created"
+        } successfully`);
       }
     });
   };
@@ -121,6 +116,7 @@ function AddResumeSummary({
       <DialogContent className="lg:max-h-screen overflow-y-scroll">
         <DialogHeader>
           <DialogTitle>{pageTitle}</DialogTitle>
+          <DialogDescription>{pageDescription}</DialogDescription>
         </DialogHeader>
         <Form {...form}>
           <form
@@ -159,26 +155,11 @@ function AddResumeSummary({
                 )}
               />
             </div>
-            <div className="md:col-span-2 mt-4">
-              <DialogFooter
-              // className="md:col-span
-              >
-                <div>
-                  <Button
-                    type="reset"
-                    variant="outline"
-                    className="mt-2 md:mt-0 w-full"
-                    onClick={closeDialog}
-                  >
-                    Cancel
-                  </Button>
-                </div>
-                <Button type="submit" disabled={!formState.isDirty}>
-                  Save
-                  {isPending && <Loader className="h-4 w-4 shrink-0 spinner" />}
-                </Button>
-              </DialogFooter>
-            </div>
+            <FormDialogFooter
+              onCancel={closeDialog}
+              isPending={isPending}
+              saveDisabled={!formState.isDirty}
+            />
           </form>
         </Form>
       </DialogContent>

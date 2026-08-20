@@ -16,7 +16,7 @@ const prisma = new PrismaClient();
 
 vi.mock("@prisma/client", () => {
   const mPrismaClient = {
-    job: { findFirst: vi.fn() },
+    job: { findFirst: vi.fn(), findMany: vi.fn() },
   };
   return { PrismaClient: vi.fn(function () { return mPrismaClient; }) };
 });
@@ -56,6 +56,7 @@ describe("createJobFromNames", () => {
     (resolveJobStatus as any).mockResolvedValue("status-1");
     (resolveTags as any).mockResolvedValue({ resolved: [], dropped: [] });
     (prisma.job.findFirst as any).mockResolvedValue(null);
+    (prisma.job.findMany as any).mockResolvedValue([]);
     (createJobRecord as any).mockResolvedValue({ id: "job-1" });
   });
 
@@ -115,12 +116,15 @@ describe("createJobFromNames", () => {
     expect(createJobRecord).toHaveBeenCalled();
   });
 
-  it("detects a duplicate by jobUrl and skips creation", async () => {
-    (prisma.job.findFirst as any).mockResolvedValueOnce({
-      id: "existing-job",
-      JobTitle: { label: "Engineer" },
-      Company: { label: "Acme" },
-    });
+  it("detects a duplicate by jobUrl (aggressive key catches www/case/tracking variants)", async () => {
+    (prisma.job.findMany as any).mockResolvedValueOnce([
+      {
+        id: "existing-job",
+        jobUrl: "https://www.Example.com/job/1?utm_source=x",
+        JobTitle: { label: "Engineer" },
+        Company: { label: "Acme" },
+      },
+    ]);
 
     const result = await createJobFromNames(
       { ...baseInput, jobUrl: "https://example.com/job/1" },
@@ -134,7 +138,7 @@ describe("createJobFromNames", () => {
       company: "Acme",
     });
     expect(result.message).toContain("Duplicate detected");
-    expect(result.message).toContain("Pass allowDuplicate: true to force create");
+    expect(result.message).toContain("update_job");
     expect(createJobRecord).not.toHaveBeenCalled();
   });
 
@@ -157,5 +161,30 @@ describe("createJobFromNames", () => {
 
     expect(result.created).toBe(true);
     expect(result.duplicateOf).toBeUndefined();
+  });
+
+  it("classifies and persists descriptionCompleteness from the raw description", async () => {
+    const full = Array.from({ length: 200 }, () => "word").join(" ");
+    const result = await createJobFromNames(
+      { ...baseInput, jobDescription: full },
+      userId,
+    );
+
+    expect(result.descriptionCompleteness).toBe("full");
+    expect(createJobRecord).toHaveBeenCalledWith(
+      expect.objectContaining({ descriptionCompleteness: "full" }),
+    );
+  });
+
+  it("marks a stub description as title-only", async () => {
+    const result = await createJobFromNames(
+      { ...baseInput, jobDescription: "Frontend Developer, $120k, Remote." },
+      userId,
+    );
+
+    expect(result.descriptionCompleteness).toBe("title-only");
+    expect(createJobRecord).toHaveBeenCalledWith(
+      expect.objectContaining({ descriptionCompleteness: "title-only" }),
+    );
   });
 });
