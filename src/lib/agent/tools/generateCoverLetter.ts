@@ -9,10 +9,8 @@ import { resolveJobForAgent } from "@/lib/agent/jobLookup";
 import { resolveResumeForAgent } from "@/lib/agent/resumeLookup";
 import { preprocessResume } from "@/lib/ai/tools/preprocessing";
 import { preprocessJob } from "@/lib/ai/tools/preprocessing-job";
-import {
-  COVER_LETTER_SYSTEM_PROMPT,
-  buildCoverLetterPrompt,
-} from "@/lib/ai/prompts/cover-letter";
+import { NO_MATCH_GUIDANCE } from "@/lib/ai/prompts/cover-letter";
+import { resolvePromptPair } from "@/lib/ai/prompts/resolve";
 import { extractMatchGuidance } from "@/lib/ai/coverLetter/matchGuidance";
 import { stripThinking } from "@/lib/ai/stripThinking";
 import { generateCoverLetterForJob } from "@/actions/coverLetter.actions";
@@ -95,14 +93,21 @@ export function buildGenerateCoverLetterTool(ctx: CoverLetterContext) {
         };
       }
 
+      const { system, prompt } = await resolvePromptPair(
+        "cover-letter",
+        ctx.userId,
+        {
+          resumeText: resumePre.data.normalizedText,
+          jobDescription: jobPre.data.normalizedText,
+          matchGuidance:
+            extractMatchGuidance(job.matchData) ?? NO_MATCH_GUIDANCE,
+        },
+      );
+
       const generation = await runNestedGeneration({
         model: ctx.model,
-        system: COVER_LETTER_SYSTEM_PROMPT,
-        prompt: buildCoverLetterPrompt(
-          resumePre.data.normalizedText,
-          jobPre.data.normalizedText,
-          extractMatchGuidance(job.matchData),
-        ),
+        system,
+        prompt,
         temperature: TEMPERATURES.FEEDBACK,
         numCtx: APP_CONSTANTS.AI_OLLAMA_NUM_CTX,
         timeoutMs: APP_CONSTANTS.AI_COVER_LETTER_TIMEOUT_MS,

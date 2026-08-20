@@ -3,4 +3,8 @@
  */
 
 export { COVER_LETTER_SYSTEM_PROMPT } from "./system";
-export { buildCoverLetterPrompt } from "./user";
+export {
+  COVER_LETTER_USER_TEMPLATE,
+  NO_MATCH_GUIDANCE,
+  buildCoverLetterPrompt,
+} from "./user";
