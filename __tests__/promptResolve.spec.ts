@@ -13,6 +13,11 @@ import {
   JOB_MATCH_SYSTEM_PROMPT,
   buildJobMatchPrompt,
 } from "@/lib/ai/prompts/job-match";
+import {
+  COVER_LETTER_SYSTEM_PROMPT,
+  NO_MATCH_GUIDANCE,
+  buildCoverLetterPrompt,
+} from "@/lib/ai/prompts/cover-letter";
 
 const findMany = db.promptOverride.findMany as unknown as ReturnType<
   typeof vi.fn
@@ -188,5 +193,64 @@ describe("resilience", () => {
     expect(system).toBe(JOB_MATCH_SYSTEM_PROMPT);
     expect(prompt).toBe(buildJobMatchPrompt(RESUME, JOB));
     warn.mockRestore();
+  });
+});
+
+// The cover letter and the MCP resume review were both added upstream after the
+// Prompt Library existed, so these cover the wiring that connects them to it.
+describe("prompts added when merging upstream", () => {
+  it("resolves the cover letter, rendering the sentinel when a job has no match", async () => {
+    const { system, prompt } = await resolvePromptPair(
+      "cover-letter",
+      "user-1",
+      {
+        resumeText: RESUME,
+        jobDescription: JOB,
+        matchGuidance: NO_MATCH_GUIDANCE,
+      },
+    );
+
+    expect(system).toBe(COVER_LETTER_SYSTEM_PROMPT);
+    expect(prompt).toBe(buildCoverLetterPrompt(RESUME, JOB, null));
+    // The placeholder must never survive into the model's input.
+    expect(prompt).not.toContain("{{matchGuidance}}");
+    expect(prompt).toContain("PRIOR MATCH ANALYSIS");
+  });
+
+  it("carries a cover letter override through to the rendered prompt", async () => {
+    findMany.mockResolvedValue([
+      {
+        promptId: "cover-letter.user",
+        overrideText:
+          "Write in British English.\n\n{{resumeText}}\n{{jobDescription}}\n{{matchGuidance}}",
+        appendText: null,
+      },
+    ]);
+
+    const { prompt } = await resolvePromptPair("cover-letter", "user-1", {
+      resumeText: RESUME,
+      jobDescription: JOB,
+      matchGuidance: NO_MATCH_GUIDANCE,
+    });
+
+    expect(prompt).toBe(
+      `Write in British English.\n\n${RESUME}\n${JOB}\n${NO_MATCH_GUIDANCE}`,
+    );
+  });
+
+  it("resolves resume-review for the MCP tool the same way the agent chat does", async () => {
+    findMany.mockResolvedValue([
+      {
+        promptId: "resume-review.system",
+        overrideText: "You are a blunt reviewer.",
+        appendText: null,
+      },
+    ]);
+
+    const { system } = await resolvePromptPair("resume-review", "user-1", {
+      resumeText: RESUME,
+    });
+
+    expect(system).toBe("You are a blunt reviewer.");
   });
 });

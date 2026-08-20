@@ -2,24 +2,32 @@ import { APP_CONSTANTS } from "@/lib/constants";
 import { checkMcpRateLimit } from "@/lib/mcp/rate-limit";
 import { getDefaultResumeForUser } from "@/lib/jobs/getDefaultResumeForUser";
 import { preprocessResume } from "@/lib/ai/tools/preprocessing";
-import {
-  RESUME_REVIEW_SYSTEM_PROMPT,
-  buildResumeReviewPrompt,
-} from "@/lib/ai/prompts/resume-review";
+import { resolvePromptPair } from "@/lib/ai/prompts/resolve";
 
 // Do not restate the SCORES line format, the "##" section list or the
 // serialization disclaimer here — the shared system prompt and user-prompt
 // builder specify all three. Restating any of them creates a second source
 // that can drift.
-function buildReviewDirective(
+//
+// Resolved through the Prompt Library rather than imported directly, so a user
+// who edits the resume-review prompt in Settings gets the same reviewer here as
+// in the agent chat.
+async function buildReviewDirective(
+  userId: string,
   resumeId: string,
   normalizedResumeText: string,
-): string {
+): Promise<string> {
+  const { system, prompt } = await resolvePromptPair(
+    "resume-review",
+    userId,
+    { resumeText: normalizedResumeText },
+  );
+
   return (
     `Act as the reviewer described below and produce a review of the ` +
     `resume shown here.\n\n` +
-    `${RESUME_REVIEW_SYSTEM_PROMPT}\n\n` +
-    `${buildResumeReviewPrompt(normalizedResumeText)}\n\n` +
+    `${system}\n\n` +
+    `${prompt}\n\n` +
     `Then call save_resume_review with the full SCORES line + markdown body ` +
     `you just produced as the "reviewText" argument (not as a chat message):\n` +
     `    { "resumeId": "${resumeId}", "reviewText": "<the full SCORES line + markdown body>" }`
@@ -71,6 +79,10 @@ export async function handleReviewResume(
     };
   }
 
-  const directive = buildReviewDirective(resume.id!, pre.data.normalizedText);
+  const directive = await buildReviewDirective(
+    userId,
+    resume.id!,
+    pre.data.normalizedText,
+  );
   return { content: [{ type: "text", text: directive }] };
 }
