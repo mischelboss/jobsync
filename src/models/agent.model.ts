@@ -167,6 +167,12 @@ export const AGENT_NESTED_TOOLS = [
   "review_resume",
   "match_job",
   "generate_cover_letter",
+  // Generates an object rather than a token stream, so it never writes to
+  // toolStreams and the transcript falls through to the running card. It
+  // belongs here all the same: it runs its own generation, so it must be
+  // terminal, and it saves server-side, so the page behind the panel needs
+  // the refresh.
+  "prepare_interview",
 ] as const;
 
 export function isNestedTool(name: string): boolean {
