@@ -2,13 +2,7 @@
 
 import { MessagesSquare } from "lucide-react";
 
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "../ui/card";
+import { JobSection } from "./JobSection";
 import { InterviewPrepView } from "@/components/interview-prep/InterviewPrepView";
 import type { InterviewPrepData } from "@/actions/interview-prep.actions";
 
@@ -33,35 +27,22 @@ export const InterviewPrepSection = ({ data, open }: Props) => {
   if (!open) return null;
 
   return (
-    <Card className="mt-4">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <MessagesSquare className="h-4 w-4" />
-          Interview Prep
-        </CardTitle>
-        <CardDescription>
-          Likely questions from your CV and this job, with answer scaffolds.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        {data ? (
-          <>
-            <InterviewPrepView
-              questions={data.questions}
-              process={data.process}
-            />
-            <p className="mt-3 text-xs text-muted-foreground">
-              Generated {new Date(data.generatedAt).toLocaleString()}
-            </p>
-          </>
-        ) : (
-          <p className="text-sm text-muted-foreground">
-            No preparation saved for this job yet. Use the Interview Prep button
-            above and the assistant will research the company and build your
-            questions.
-          </p>
-        )}
-      </CardContent>
-    </Card>
+    <JobSection
+      icon={MessagesSquare}
+      title="Interview Prep"
+      meta={
+        data ? new Date(data.generatedAt).toLocaleDateString() : undefined
+      }
+    >
+      {data ? (
+        <InterviewPrepView questions={data.questions} process={data.process} />
+      ) : (
+        <p className="text-sm text-muted-foreground">
+          No preparation saved for this job yet. Use the Interview Prep button
+          above and the assistant will research the company and build your
+          questions.
+        </p>
+      )}
+    </JobSection>
   );
 };
