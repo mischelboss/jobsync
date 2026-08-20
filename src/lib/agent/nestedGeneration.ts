@@ -1,7 +1,14 @@
 import "server-only";
 
-import { streamText, type LanguageModel, type UIMessageStreamWriter } from "ai";
+import {
+  generateObject,
+  streamText,
+  type LanguageModel,
+  type UIMessageStreamWriter,
+} from "ai";
+import type { z } from "zod";
 import { AGENT_NESTED_STREAM_PART_TYPE } from "@/models/agent.model";
+import { repairJsonText } from "@/lib/ai/repair-json";
 
 export type NestedGenerationResult =
   | { status: "ok"; text: string }
@@ -93,4 +100,79 @@ export async function runNestedGeneration({
   }
 
   return { status: "ok", text };
+}
+
+export type NestedObjectGenerationResult<T> =
+  | { status: "ok"; object: T }
+  | { status: "busy" }
+  | { status: "failed" };
+
+type NestedObjectGenerationArgs<T> = {
+  model: LanguageModel;
+  schema: z.ZodType<T>;
+  system: string;
+  prompt: string;
+  temperature: number;
+  numCtx: number;
+  timeoutMs: number;
+  abortSignal?: AbortSignal;
+  guard: NestedGenerationGuard;
+  label: string;
+};
+
+/**
+ * The structured sibling of runNestedGeneration, for tools whose output is a
+ * schema-shaped object rather than markdown.
+ *
+ * It shares the invariant half — the single-flight guard, its own deadline
+ * alongside the turn's signal, and uniform failure labelling — but writes
+ * nothing to the transcript: streaming raw JSON tokens at the user would be
+ * noise, so the tool's running card covers progress and the result card
+ * renders the finished object.
+ *
+ * There is no "incomplete" status here. streamText can stop mid-analysis and
+ * still hand back usable prose; a truncated object either fails to parse or
+ * fails schema validation, and both surface as "failed".
+ */
+export async function runNestedObjectGeneration<T>({
+  model,
+  schema,
+  system,
+  prompt,
+  temperature,
+  numCtx,
+  timeoutMs,
+  abortSignal,
+  guard,
+  label,
+}: NestedObjectGenerationArgs<T>): Promise<NestedObjectGenerationResult<T>> {
+  if (guard.running) return { status: "busy" };
+  guard.running = true;
+
+  const signals: AbortSignal[] = [AbortSignal.timeout(timeoutMs)];
+  if (abortSignal) signals.push(abortSignal);
+
+  try {
+    const { object } = await generateObject({
+      model,
+      schema,
+      system,
+      prompt,
+      temperature,
+      abortSignal: AbortSignal.any(signals),
+      // Same recovery the non-agent call sites use: some OpenRouter models
+      // ignore the JSON response format and answer with a ```json fence.
+      experimental_repairText: repairJsonText,
+      providerOptions: {
+        ollama: { options: { num_ctx: numCtx } },
+        openai: { strictJsonSchema: false },
+      },
+    });
+    return { status: "ok", object };
+  } catch (error) {
+    console.error(`[agent-chat] ${label} object generation failed:`, error);
+    return { status: "failed" };
+  } finally {
+    guard.running = false;
+  }
 }

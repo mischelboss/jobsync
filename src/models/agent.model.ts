@@ -1,5 +1,10 @@
 import type { DescriptionCompleteness } from "@/models/job.model";
-import type { JobMatchScores, ResumeScores } from "@/models/ai.schemas";
+import type {
+  JobMatchScores,
+  ResumeScores,
+  InterviewQuestions,
+  ProcessResearch,
+} from "@/models/ai.schemas";
 
 // Dependency-free by design: client components import these types, so nothing
 // here may pull in Prisma or server-only code. Type-only imports are erased.
@@ -200,3 +205,26 @@ export function addJobSettled(step: {
   if (!result) return true;
   return !(result.output as AgentAddJobResult | undefined)?.validationError;
 }
+
+// What prepare_interview returns to the model AND to the result card. The
+// questions travel in full so a follow-up ("give me more on the culture ones")
+// answers from them rather than regenerating; the resume text and the job
+// description do not.
+export type AgentPrepareInterviewResult =
+  | {
+      status: "ok";
+      jobId: string;
+      jobTitle: string;
+      company: string;
+      resumeId: string;
+      resumeTitle: string;
+      questions: InterviewQuestions;
+      process: ProcessResearch | null;
+      contextSources: string[];
+      generatedAt: string;
+    }
+  | { status: "no_job" }
+  | { status: "needs_selection"; resumes: { id: string; title: string }[] }
+  | { status: "no_resumes" }
+  | { status: "unreadable"; what: "job" | "resume"; title: string; reason: string }
+  | { status: "generation_failed"; jobTitle: string; reason: string };

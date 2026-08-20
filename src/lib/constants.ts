@@ -74,6 +74,11 @@ export const APP_CONSTANTS = {
   // output is a single 250-400 word letter, not a multi-section analysis.
   AI_COVER_LETTER_TIMEOUT_MS: 120_000,
 
+  // Interview prep generation timeout. The longest of the four: it emits seven
+  // grouped question arrays, each entry carrying an answer scaffold, so the
+  // object is several times the size of a match analysis.
+  AI_INTERVIEW_PREP_TIMEOUT_MS: 240_000,
+
   // Floor for "too short to be a letter", shared by the agent tool and the
   // save action so the two cannot drift apart.
   MIN_COVER_LETTER_CHARS: 10,
