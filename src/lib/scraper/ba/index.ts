@@ -1,9 +1,11 @@
 import type { JobDetails, ScraperResult, ScraperError } from "../types";
 
 // Bundesagentur für Arbeit Jobbörse — the largest legal German job source,
-// free via the official app endpoint. Endpoint and fixed API key are not
+// free via the official app endpoint. Endpoint and the fixed client key are not
 // contractually guaranteed and can change, so every call is defensively
 // error-mapped (a failure becomes a run error, never a crash).
+// The key below is the publicly documented client key of that endpoint (the
+// one the official job-search app sends), not a private credential.
 const BA_BASE_URL =
   "https://rest.arbeitsagentur.de/jobboerse/jobsuche-service/pc/v4";
 const BA_API_KEY = "jobboerse-jobsuche";

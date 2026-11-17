@@ -1,5 +1,7 @@
 # Changelog
 
+> This changelog is inherited from the upstream project, [Gsync/jobsync](https://github.com/Gsync/jobsync), and covers its releases up to 1.1.17, on which this fork is based. The compare links point to upstream. Changes specific to this fork are listed in the README under [What this fork adds](./README.md#what-this-fork-adds).
+
 ## [1.1.17](https://github.com/Gsync/jobsync/compare/v1.1.16...v1.1.17) (2026-08-16)
 
 

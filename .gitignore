@@ -75,6 +75,5 @@ evals/mcp-tools/tools.json
 evals/agent-chat/tools.json
 
 # One-off eval investigation harnesses. Kept on disk so a finding can be
-# re-run, but not part of the shipped suite. See the runs they produced in
-# docs/architecture/agent-chat.md.
+# re-run, but not part of the shipped suite.
 evals/*/_investigate-*
