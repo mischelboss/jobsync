@@ -8,10 +8,11 @@ import { buildMatchJobTool } from "./matchJob";
 import { buildGenerateCoverLetterTool } from "./generateCoverLetter";
 import { buildPrepareInterviewTool } from "./prepareInterview";
 
-// The four nested tools deliberately break the "a tool touches neither the
-// route nor provider resolution" rule in CLAUDE.md: they run their own
-// generation, so they need the resolved model and the stream writer. Recorded
-// in docs/architecture/agent-chat.md rather than contorted around.
+// The four nested tools (review_resume, match_job, generate_cover_letter,
+// prepare_interview) deliberately break the convention that a tool touches
+// neither the route nor provider resolution: they run their own generation, so
+// they need the resolved model and the stream writer. That is accepted rather
+// than contorted around.
 export function buildAgentTools(ctx: {
   userId: string;
   pastedText?: string;

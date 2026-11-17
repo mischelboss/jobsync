@@ -50,6 +50,7 @@ const baseProps = {
   locations: [],
   sources: [],
   tags: [],
+  interviewPrep: null,
 };
 
 const makeJob = (overrides: Partial<JobResponse> = {}): JobResponse => ({

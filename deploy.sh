@@ -61,10 +61,10 @@ git pull origin "$BRANCH"
 echo -e "${GREEN}[4/5]${NC} Stopping existing containers..."
 $COMPOSE_CMD down
 
-# Pull latest images and start containers
-echo -e "${GREEN}[5/5]${NC} Pulling latest images and starting containers..."
-$COMPOSE_CMD pull
-$COMPOSE_CMD up -d --force-recreate
+# The image is built from this checkout (see docker-compose.yml), so rebuild it
+# from the freshly pulled source rather than pulling a prebuilt image.
+echo -e "${GREEN}[5/5]${NC} Building the image and starting containers..."
+$COMPOSE_CMD up -d --build --force-recreate
 
 # Poll the app until it actually responds, so the success message below only
 # prints once the app is reachable in a browser — not just "container started".

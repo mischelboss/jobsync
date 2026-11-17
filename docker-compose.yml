@@ -9,8 +9,10 @@ services:
       - NODE_ENV=production
       - MCP_ENABLED=${MCP_ENABLED:-true}
       - DATABASE_URL=file:/data/dev.db
-      - AUTH_SECRET=${AUTH_SECRET:-your-auth-secret}
-      - ENCRYPTION_KEY=${ENCRYPTION_KEY:-you-encryption-key-here}
+      # Left empty on purpose: if unset, docker-entrypoint.sh generates a random
+      # value on first start and stores it in the data volume.
+      - AUTH_SECRET=${AUTH_SECRET:-}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY:-}
       - NEXTAUTH_URL=${NEXTAUTH_URL:-http://localhost:3737}
       - AUTH_TRUST_HOST=${AUTH_TRUST_HOST:-true}
       - TZ=${TZ:-America/Edmonton}

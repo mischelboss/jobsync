@@ -66,10 +66,10 @@ Write-Host "[4/5] Stopping existing containers..." -ForegroundColor Green
 Compose down
 Assert-LastExit "docker compose down failed"
 
-Write-Host "[5/5] Pulling latest images and starting containers..." -ForegroundColor Green
-Compose pull
-Assert-LastExit "docker compose pull failed"
-Compose up -d --force-recreate
+# The image is built from this checkout (see docker-compose.yml), so rebuild it
+# from the freshly pulled source rather than pulling a prebuilt image.
+Write-Host "[5/5] Building the image and starting containers..." -ForegroundColor Green
+Compose up -d --build --force-recreate
 Assert-LastExit "docker compose up failed"
 
 # Poll the app until it actually responds, so the success message below only

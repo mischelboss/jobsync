@@ -41,7 +41,8 @@ export interface ModelSpec {
   lookup?: boolean;
   // Foreign-key column -> the model whose ids it points at.
   fks: Record<string, BackupModel>;
-  // Ownership-scoped where clause, per CLAUDE.md's IDOR rules.
+  // Ownership-scoped where clause: every query is limited to the importing
+  // user's own rows, so a backup can never read or touch another user's data.
   scope: (userId: string) => Record<string, unknown>;
 }
 

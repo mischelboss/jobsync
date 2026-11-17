@@ -1,152 +1,151 @@
 # JobSync
 
-<p align="center"><strong>The self-hosted job search assistant with AI-powered resume review, job matching, and automated discovery</strong></p>
+**A self-hosted job search assistant: track applications, manage resumes, and let an AI assistant review, match and prepare — with your data staying on your own machine.**
 
-<p align="center">
-  <a href="https://demo.jobsync.ca">Live Demo</a> ·
-  <a href="#quick-start">Quick Start</a> ·
-  <a href="#ai-assistant-in-app-chat">AI Assistant</a> ·
-  <a href="#mcp-server-ai-agent-integration">MCP Setup</a>
-</p>
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](./LICENSE)
+![Next.js 15](https://img.shields.io/badge/Next.js-15-black)
+![TypeScript](https://img.shields.io/badge/TypeScript-5-blue)
+![Self-hosted](https://img.shields.io/badge/self--hosted-Docker-blue)
 
-<p align="center">
-  <a href="./LICENSE"><img src="https://img.shields.io/github/license/Gsync/jobsync" alt="License"></a>
-  <a href="https://github.com/Gsync/jobsync/stargazers"><img src="https://img.shields.io/github/stars/Gsync/jobsync?style=social" alt="GitHub Stars"></a>
-  <img src="https://img.shields.io/badge/self--hosted-Docker-blue" alt="Self-hosted with Docker">
-</p>
+![JobSync dashboard with the AI assistant docked on the right](./screenshots/jobsync-dashboard.png)
 
-JobSync is a free, open-source companion for your job search: track applications, manage and export resumes, and ask a built-in AI assistant to review a resume, match it against a job, write a cover letter, or add a job from a posting you paste in — all self-hosted on your own server, so your data stays under your control. AI features can run entirely locally via Ollama or through your choice of cloud provider, and JobSync's built-in MCP server lets AI agents like Claude Desktop add jobs and interview questions straight from your chat.
+## About this project
 
-![App Snapshot](./screenshots/jobsync-dashboard.png?raw=true "Jobsync dashboard")
+This is a personal hobby project and a **fork of [Gsync/jobsync](https://github.com/Gsync/jobsync)** (MIT licensed). The application foundation — job tracker, dashboard, resume management, tasks and activities, the AI chat assistant and the MCP server — comes from the original project. I use this fork to learn, to experiment, and to build the features I wanted for my own job search. See [What this fork adds](#what-this-fork-adds) for exactly what is mine.
 
-## Key Features
-- **Application Tracker:** Keep a detailed record of all your job applications, including company details, job titles, application dates, and current status.
+It is a hobby project: use it, read it, learn from it — but expect rough edges, and no support guarantees.
 
-  ![Jobs Applied List](./screenshots/jobsync-jobs.png?raw=true "Jobsync Jobs Page")
+**Built with AI assistance.** This fork was developed with AI coding assistants, mainly [Claude Code](https://claude.com/claude-code), which is why many commits carry a `Co-Authored-By: Claude` trailer. The code is covered by an automated test suite (see [Local development](#local-development)).
 
-- **Monitoring Dashboard:** Visualize your job search progress with an interactive dashboard that provides insights into your application activities, success rates, and upcoming tasks.
+## Features
 
-- **Resume Management:** Store and manage your resumes, export them as professionally formatted PDFs (Simple or Professional template), and use them with AI to get reviews and match with job descriptions. Import existing resumes from PDF or Word (.docx) files — AI extracts and structures your contact info, experience, education, and certifications so you can review and save each section individually.
+- **Application tracker** — companies, titles, dates, status, notes, and a match score per job.
+- **Dashboard** — applications, activity hours and an activity calendar at a glance.
+- **Resume management** — multiple resumes, PDF export (Simple or Professional layout), import from PDF or Word (.docx) with section-by-section review.
+- **Tasks & activities** — plan work and track time, including breaks.
+- **Automated job discovery** — scheduled automations pull new postings, match them against your resume with AI, and surface the best fits for review (see [Job sources](#job-sources)).
+- **AI assistant** — a chat panel docked beside the current page. It can review a resume, score a resume against the job you are viewing, write a cover letter, prepare you for an interview, and add a job from a pasted posting. It asks for confirmation before it saves anything.
+- **MCP server** — AI agents such as Claude Desktop can add jobs and interview questions to JobSync from chat, with your approval (see [MCP server](#mcp-server)).
+- **Local or cloud AI** — run models locally with Ollama, or use OpenAI, DeepSeek, Google Gemini or OpenRouter.
+- **Backup & restore** — export your data and restore it with a guarded import (Settings > Data).
 
-- **Automated Job Discovery:** Schedule automations that track companies via job board APIs, then AI-match each listing against your resume and surface the best fits for review. See [Features in Detail](#automated-job-discovery) below.
+![The jobs list](./screenshots/jobsync-jobs.png)
 
-- **Task & Activity Management:** Manage tasks, track activities linked with tasks including time tracking.
+## What this fork adds
 
-- **AI Assistant:** A chat panel that stays docked beside whatever page you're on. Ask it to review a resume, score how well it matches the job you're viewing, write a tailored cover letter, or add a job straight from a posting you paste in — it asks for your confirmation before saving anything. See [Features in Detail](#ai-assistant-in-app-chat) below.
+On top of upstream, this fork adds:
 
-- **AI Agent Integration (MCP):** Connect AI agents like Claude Desktop via a built-in MCP server to add job applications and Question Bank entries directly from your chat, with your approval. When a job description is substantial enough, the agent can also analyze it against your default resume and save a job match score right from the chat.
+- **Prompt Library** — edit or extend the instructions JobSync sends to the AI model, per account (Settings > Prompt Library).
+- **Interview preparation** — for a job, generates likely interview questions and researches the company and its interview process. Available on the job page and through the AI assistant. A [Tavily](https://tavily.com) key is optional and enables web research.
+- **Email-alert job source** — connect one IMAP mailbox and let automations read job-alert emails. The mailbox password is encrypted at rest.
+- **Bundesagentur für Arbeit** as a job source for automations (German job market).
+- **Job PDF import** — prefill the Add Job form from a PDF of a posting.
+- **Run now** for automations, to trigger a run without waiting for the schedule.
+- **More robust AI output** — recovers structured output from models that wrap their JSON in a code fence.
+- Docker and build fixes (self-hosted font instead of a Google Fonts fetch at build time, lockfile fixes), and safer secret handling (see [Security notes](#security-notes)).
 
-## Quick Start
+## Quick start (Docker)
 
-Make sure [Docker](https://www.docker.com) is installed and running, then:
+Requires [Docker](https://www.docker.com) with Compose.
 
 ```sh
-git clone https://github.com/Gsync/jobsync.git
+git clone https://github.com/mischelboss/jobsync.git
 cd jobsync
 docker compose up
 ```
 
-> **Note:** The first startup builds the app image, which can take a few minutes — if the app is unreachable right after `docker compose up`, wait a bit before accessing it in your browser.
+The first start builds the image, which can take a few minutes. Then open <http://localhost:3737> and create your account. No configuration is required: secrets are generated on first start (see [Security notes](#security-notes)).
 
-Open [http://localhost:3737](http://localhost:3737) and create your account. That's it!
+AI providers are configured in the app after you sign in: **Settings > AI Provider** to pick a provider and model, **Settings > API Keys** for the keys.
 
-API keys for AI providers can be configured in **Settings** after signing in.
+Your data (SQLite database, uploaded resumes, generated secrets) lives in `./jobsyncdb/data`. Back that folder up.
 
-### Configuration (Optional)
+### Configuration (optional)
 
-Environment variables can be set in `docker-compose.yml`:
+Set these in a `.env` file next to `docker-compose.yml` (start from [`.env.example`](./.env.example)) or in your shell.
 
 | Variable | Description |
 |---|---|
-| `TZ` | Your timezone (e.g. `America/Edmonton`). **Set this on remote servers** to avoid activity time shifts. |
-| `AUTH_SECRET` | Auto-generated if not set. To set manually: `openssl rand -base64 32` |
+| `TZ` | Your timezone, e.g. `Europe/Berlin`. **Set this on remote servers**, otherwise activity times can shift. |
+| `NEXTAUTH_URL` | The URL you open the app at. Change it from `localhost` if you run it on a homelab server or behind a proxy. |
+| `AUTH_SECRET` | Signs sessions. Generated automatically if not set. |
+| `ENCRYPTION_KEY` | Encrypts stored API keys and the IMAP password. Generated automatically if not set. Must stay stable. |
+| `OLLAMA_BASE_URL` | Where Ollama runs. Defaults to the Docker host (`http://host.docker.internal:11434`). |
+| `MCP_ENABLED` | Enables the MCP server. On by default in the Docker setup. |
+| `*_API_KEY` | Optional fallback keys for the AI providers. Keys saved in the app take precedence. |
 
 ### Updating
 
-From the project directory, run the deploy script to pull the latest changes and rebuild:
+From the project directory:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/Gsync/jobsync/main/deploy.sh | sudo bash -s
+./deploy.sh          # macOS / Linux / WSL
+.\deploy.ps1         # Windows PowerShell
 ```
 
-On **Windows**, run the PowerShell equivalent from the project directory instead (`deploy.sh` needs WSL or Git Bash; `deploy.ps1` runs natively):
+The script pulls the latest changes from this repository, rebuilds the image and restarts the container. Without the script: `git pull && docker compose up -d --build`.
 
-```powershell
-.\deploy.ps1
+## Local development
+
+Requires Node.js 20 and npm.
+
+```sh
+npm install
+cp .env.example .env     # then uncomment and set AUTH_SECRET and ENCRYPTION_KEY (openssl rand -base64 32)
+npx prisma migrate dev
+npm run dev              # http://localhost:3737
 ```
 
->Note: If you are updating in a homelab environment, edit `NEXTAUTH_URL` in your `.env` file to use your server IP address instead of `localhost`. See `.env.example` for the expected format.
+| Command | What it does |
+|---|---|
+| `npm test` | Unit and component tests (Vitest) |
+| `npm run lint` | ESLint |
+| `npm run test:e2e` | End-to-end tests (Playwright; starts the dev server itself) |
+| `npm run eval:all` | Prompt regression tests against real models — see [`evals/`](./evals/README.md). Needs provider API keys or a local Ollama. |
 
-## Features in Detail
+**Stack:** Next.js 15 (App Router, server actions), React 19, TypeScript, Prisma with SQLite, Auth.js, Tailwind CSS 4 with shadcn/ui, the Vercel AI SDK, Vitest, Playwright and promptfoo.
 
-### AI Assistant (In-App Chat)
+## AI providers
 
-All of JobSync's AI features live in one place: a chat panel that docks to the side of the app instead of taking it over, so the page you were on stays visible and usable while the assistant works.
+Pick the provider and model under **Settings > AI Provider**. Ollama is the default.
 
-Open it from the **AI Assistant** button in the header, or let the app open it for you — the **Review** button on a resume and the **Match with AI** and **Cover Letter** buttons on a job all start the matching request in the panel.
+The selected model must support **structured output** and **tool calling** — the AI assistant works by calling tools, so a model without tool support replies with text instead of doing anything. The assistant has been tested end to end with `qwen3.5:9b` on Ollama (fully local), `deepseek-v4-flash` and OpenAI `gpt-4.1`; other tool-calling models should work too.
 
-What you can ask for:
+| Provider | Key |
+|---|---|
+| **Ollama** (local) | None. Install [Ollama](https://ollama.com); available models are listed automatically. Raising its context length from 4k to 16k helps automated job matching with long resumes and postings. |
+| **OpenAI** | [platform.openai.com/api-keys](https://platform.openai.com/api-keys) |
+| **DeepSeek** | [platform.deepseek.com/api_keys](https://platform.deepseek.com/api_keys) |
+| **Google Gemini** | [aistudio.google.com/apikey](https://aistudio.google.com/apikey) |
+| **OpenRouter** | [openrouter.ai/keys](https://openrouter.ai/keys) |
 
-- **Resume review** — a full review of any of your resumes, with scores and written feedback, saved to the resume so you can come back to it.
-- **Job match** — how well one of your resumes fits the job you're currently viewing, with a match score, a recommendation, and a write-up, saved to the job. Open the job first; the assistant scores the job on the page.
-- **Cover letter** — a tailored letter for the job you're viewing, written from your resume and the job description (and any guidance from an earlier match), saved to your documents. Ask again and you get a new letter rather than losing the old one.
-- **Add a job from a posting** — paste a job posting into the chat and ask it to add the job. It picks out the company, title, location, salary, tags and the rest, and shows you all of it on a confirmation card before anything is written. The description is saved exactly as you pasted it, not as a summary. Nothing reaches your database until you press Confirm.
+Enter keys under **Settings > API Keys**. If you run JobSync on a homelab server and Ollama on another machine, expose Ollama on your network and point the Ollama base URL there.
 
-The reviews, matches and letters are the same analyses the dedicated panels used to produce — the chat is a new way in, not a lighter-weight version.
+## Job sources
 
-The assistant is deliberately narrow about what it can see: it reads your resumes and the single job you're looking at, and nothing else. It can't list or search your jobs, and it can't see tasks or activities. Pasted postings are also treated as untrusted text, so instructions hidden inside a posting can't make the assistant act on your data.
+Automations (in the sidebar) search on a schedule and AI-match each posting against your resume. Discovered jobs wait for your review: accept them into your tracker or dismiss them.
 
-Pick a model under **Settings > AI Settings** before using the panel — it needs one that supports tool calling, and it will tell you rather than guessing if none is set. See [known-good models](#supported-ai-model-providers) for the ones that have been tested, including a fully local option.
+- **Greenhouse** and **Lever** — track specific companies by name (from a built-in directory) or by pasting a board URL. A fast local relevance score ranks every posting first; the AI match runs only on the top candidates to keep costs bounded. No API key required.
+- **Bundesagentur für Arbeit** — the German federal job board. No API key required.
+- **Email alerts** — read job-alert emails from an IMAP mailbox you connect under **Settings > Email Mailbox**. For Gmail or Outlook with 2FA, use an app password.
 
-![AI Resume Review](./screenshots/jobsync-ai.gif)
-![AI Job Match](./screenshots/jobsync-ai-jobmatch.gif)
+## MCP server
 
-### PDF Resume Export
+JobSync exposes an [MCP](https://modelcontextprotocol.io) server so AI agents (Claude Desktop and others) can add jobs and Question Bank entries directly, with your approval. Example prompts:
 
-Export any resume as a professionally formatted PDF directly from the resume page. Choose between two layouts — a clean **Simple** template and a more polished **Professional** template. If a PDF attachment already exists, you'll be prompted to replace it or keep the download only.
+- *"Add this job to JobSync: Senior Backend Engineer at Acme Corp, hybrid, … (paste the posting)"*
+- *"I was just asked 'How would you design a rate limiter?' in an interview — add it to my Question Bank with my answer: …"*
 
-### Resume Import
+The agent resolves or creates company, title, location and tags by name and reports what it matched versus created. If you have set a default resume, it also scores the fit and saves the match to the job.
 
-Import an existing resume from a PDF or Word (.docx) file. AI extracts structured data — contact info, summary, skills, work experience, education, and certifications — and presents each section as a review card. You can accept or skip individual sections before saving them to your resume.
+**1. Generate a token.** In JobSync, open **Settings > MCP Access**, click **Generate**, name it (e.g. "Claude Desktop") and choose an expiry. Copy the token — it is shown only once.
 
-### Automated Job Discovery
-
-Set up automations that search for new jobs on a schedule and AI-match them against your resume, so relevant openings come to you.
-
-- **Greenhouse** — track specific companies by name from a built-in directory (or by pasting a board URL). Each run pulls every published role from those companies' Greenhouse boards, ranks them against your target titles, skills, and resume with a fast local relevance score, and runs the AI match on only the top candidates to keep costs bounded. No API key required.
-
-- **Lever** — same company-tracking workflow as Greenhouse, backed by a built-in directory of 1,160+ companies (or paste a board URL). Automatically resolves the right regional API (`lever.co` or `eu.lever.co`) per company and carries full remote/hybrid/onsite signal from the listing. No API key required.
-
-More job board sources are on the way. Discovered jobs are surfaced for review — accept the ones you like to promote them into your job tracker, or dismiss the rest.
-
-### MCP Server (AI Agent Integration)
-
-JobSync exposes an MCP server so AI agents (Claude Desktop, Hermes, OpenClaw, etc.) can add job applications and Question Bank entries directly, with your approval.
-
-#### Use Case
-
-Browsing a job posting or reading an interview question elsewhere and don't want to break your flow to log it manually? Just ask your connected AI agent, for example:
-
-- *"Add this job to JobSync (copy/paste the complete job details or try providing a link): Senior Backend Engineer at Acme Corp, JobType, location, Job description... "*
-- *"I just got asked this in an interview — add it to my Question Bank: 'How would you design a rate limiter?' with my answer: ..."*
-
-The agent resolves or creates the company, title, location, and tags by name, and reports back what it matched versus created — so your data stays de-duplicated without you having to switch to the app.
-
-When you add a job with a substantial description and you've set a **default resume** (Profile), the agent also analyzes the fit against that resume and saves a job match score — no round trip to the app needed. The result shows up on the job just like an in-app AI match, scores, recommendation, and write-up included.
-
-#### 1. Generate a token
-
-1. Sign in to JobSync and go to **Settings > MCP Access**.
-2. Click **Generate**, give it a name (e.g. the client you'll connect, like "Claude Desktop"), and pick an expiry.
-3. Copy the token and config snippets shown — the full token is only displayed once.
-
-#### 2. Add it to your MCP client
+**2. Add it to your MCP client.**
 
 <details>
 <summary><strong>Claude Desktop</strong></summary>
 
-1. Open Claude Desktop → **Settings > Developer > Edit Config**. This opens `claude_desktop_config.json` in your default editor.
-2. Paste the "Claude Desktop (via mcp-remote)" snippet from the reveal dialog into `mcpServers`, e.g.:
+Claude Desktop only supports local (stdio) servers directly, so `mcp-remote` bridges to JobSync. Open **Settings > Developer > Edit Config** and add:
 
 ```json
 {
@@ -164,16 +163,14 @@ When you add a job with a substantial description and you've set a **default res
 }
 ```
 
-3. Save and fully restart Claude Desktop (quit, not just close the window).
-
-> **Note:** Claude Desktop only supports local (stdio) MCP servers directly, so `mcp-remote` is required as a bridge to JobSync's remote endpoint.
+Then fully restart Claude Desktop (quit, not just close the window).
 
 </details>
 
 <details>
-<summary><strong>Other clients (OpenClaw, Hermes, etc.)</strong></summary>
+<summary><strong>Other clients</strong></summary>
 
-Clients that support `streamable-http` natively can connect directly without `mcp-remote`:
+Clients that support `streamable-http` natively can connect directly:
 
 ```json
 {
@@ -189,95 +186,29 @@ Clients that support `streamable-http` natively can connect directly without `mc
 
 </details>
 
-> **Self-hosting on a home network?** If your JobSync URL is a plain `http://` LAN address (not `localhost` or HTTPS), add `--allow-http` to the `mcp-remote` args — it refuses non-HTTPS URLs by default. The Settings page adds this flag automatically when it detects a non-localhost HTTP URL.
+> **Plain-HTTP LAN address?** If your JobSync URL is `http://` and not `localhost` or HTTPS, add `--allow-http` to the `mcp-remote` args — it refuses non-HTTPS URLs by default.
 
+## Security notes
+
+JobSync is built for **self-hosting on a trusted network**. It is a hobby project that has not had a professional security audit.
+
+- **No built-in HTTPS.** If you expose it beyond your own network, put it behind a reverse proxy with TLS, and set `NEXTAUTH_URL` accordingly.
+- **Secrets are generated, not shipped.** If you do not set `AUTH_SECRET` and `ENCRYPTION_KEY`, the Docker entrypoint creates random ones on first start and stores them in the data volume (`./jobsyncdb/data`, mode 600). They sit next to the database, so for stronger separation provide `ENCRYPTION_KEY` through your environment instead.
+- **Stored credentials are encrypted at rest** (AES-256-GCM): provider API keys and the IMAP password. **Back up your `ENCRYPTION_KEY`** — without it they cannot be recovered and you would have to enter them again.
+- **MCP tokens** are stored hashed, expire, and can be revoked in Settings.
+- **Pasted job postings are treated as untrusted text.** The AI assistant is deliberately narrow in what it can see and do, and instructions hidden in a posting cannot make it act on your data. The eval suite includes prompt-injection test cases for this.
+- **If you ran an earlier revision of this fork** without setting `ENCRYPTION_KEY`, it used a fixed placeholder key. After updating, a new random key is generated and you need to re-enter your API keys and IMAP password in Settings. Sessions are also reset once.
+
+To report a security problem, please do not open a public issue. Use the **Security** tab of this repository > **Report a vulnerability** instead.
 
 ## Contributing
 
-We welcome contributions! Please read our [Contributing Guidelines](./CONTRIBUTING.md) to get started. This project follows a [Code of Conduct](./CODE_OF_CONDUCT.md) — by participating, you agree to uphold its standards.
+Pull requests are welcome — see [CONTRIBUTING.md](./CONTRIBUTING.md). Issues are turned off on this repository, so a pull request (even a small one) is the way to suggest a fix or an improvement. This project follows a [Code of Conduct](./CODE_OF_CONDUCT.md).
 
-### Credits
+If a problem is in code that comes from the original project, report it [upstream](https://github.com/Gsync/jobsync/issues).
 
-- <a href="https://github.com/facebook/react">React</a>
-- <a href="https://github.com/vercel/next.js">Next</a>
-- <a href="https://github.com/shadcn-ui/ui">Shadcn</a>
-- <a href="https://github.com/prisma/prisma">Prisma</a>
-- <a href="https://github.com/tailwindlabs/tailwindcss">Tailwind</a>
-- <a href="https://github.com/ueberdosis/tiptap">Tiptap</a>
-- <a href="https://github.com/plouc/nivo">Nivo</a>
-- <a href="https://github.com/sqlite/sqlite">Sqlite</a>
-- <a href="https://github.com/vercel/ai">Vercel AI-SDK</a>
-- <a href="https://github.com/ollama/ollama">Ollama</a>
+## License and credits
 
-### Supported AI Model Providers
+Released under the [MIT License](./LICENSE). The original work is © gsync; changes in this fork are © mischelboss. Thanks to the author of the [original JobSync](https://github.com/Gsync/jobsync) for the foundation, and to the projects it builds on:
 
-API keys for all cloud providers can be configured in **Settings > AI Settings** after signing in. Ollama is selected as the default provider.
-
-> **Note:** Selected models must support **structured output** and **tool calling** for AI features to work correctly — the AI Assistant panel works by calling tools, so a model without tool support will reply with text instead of doing anything.
-
-**Known-good models.** The AI Assistant has been tested end to end with `qwen3.5:9b` on Ollama (fully local), `deepseek-v4-flash`, and OpenAI `gpt-4.1`. Other tool-calling models should work, but these are the ones exercised against the full set of assistant features.
-
-<details>
-<summary><strong>Ollama (Local)</strong></summary>
-
-Works with [Ollama](https://ollama.com) to run AI models locally on your machine.
-
-- Make sure Ollama is installed and running on the same system
-- AI settings will show a list of available models based on what you have downloaded in Ollama
-- **Recommended:** Increase the Ollama context length from the default 4k to 16k — this helps automated job matching avoid truncating longer resume/job description prompts. The AI Assistant, resume review, job match and cover letter features aren't affected: they ask Ollama for the context size they need on every call, so raising this setting won't change them. Don't raise it much further either — a very large default costs you noticeably slower responses for no benefit
-- No API key required — runs entirely on your hardware
-- If you are running jobsync on a homelab server, you can expose ollama to network from Ollama settings on your local machine. Also make sure your ollama base url is pointed to your local system IP under API keys section of settings.
-
-</details>
-
-<details>
-<summary><strong>OpenAI</strong></summary>
-
-- Get your API key at [platform.openai.com/api-keys](https://platform.openai.com/api-keys)
-- Add your API key in **Settings > AI Settings**
-- Select **OpenAI** as the provider and choose your preferred model
-- Available models are fetched dynamically from the OpenAI API
-
-</details>
-
-<details>
-<summary><strong>DeepSeek</strong></summary>
-
-- Get your API key at [platform.deepseek.com/api_keys](https://platform.deepseek.com/api_keys)
-- Add your API key in **Settings > AI Settings**
-- Select **DeepSeek** as the provider and choose your preferred model
-
-</details>
-
-<details>
-<summary><strong>Google Gemini</strong></summary>
-
-- Get your API key at [aistudio.google.com/apikey](https://aistudio.google.com/apikey)
-- Add your API key in **Settings > AI Settings**
-- Select **Gemini** as the provider and choose your preferred model
-
-</details>
-
-<details>
-<summary><strong>OpenRouter</strong></summary>
-
-Access a wide range of AI models from multiple providers through a single API.
-
-- Get your API key at [openrouter.ai/keys](https://openrouter.ai/keys)
-- Add your API key in **Settings > AI Settings**
-- Select **OpenRouter** as the provider and choose from available models
-
-</details>
-
-### Note
-
-- If you are updating from an old version and already logged in, please try logging out and login again.
-
-## Support the Project
-
-If JobSync has been helpful in your job search, consider giving it a star on GitHub! It helps others discover the project and motivates continued development.
-
-[![GitHub Stars](https://img.shields.io/github/stars/Gsync/jobsync?style=social)](https://github.com/Gsync/jobsync)
-
-Every star means a lot — thank you for your support!
-
+[React](https://github.com/facebook/react) · [Next.js](https://github.com/vercel/next.js) · [shadcn/ui](https://github.com/shadcn-ui/ui) · [Prisma](https://github.com/prisma/prisma) · [Tailwind CSS](https://github.com/tailwindlabs/tailwindcss) · [Tiptap](https://github.com/ueberdosis/tiptap) · [Nivo](https://github.com/plouc/nivo) · [SQLite](https://www.sqlite.org) · [Vercel AI SDK](https://github.com/vercel/ai) · [Ollama](https://github.com/ollama/ollama)
